@@ -1,49 +1,69 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import api from '../api/client';
-import { Card, ScrollArea, EmptyState } from '../components/ui';
+import { useAuth } from '../context/AuthContext';
+import AtaList from '../components/AtaList';
+import { Button, Card, ScrollArea } from '../components/ui';
+
+const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
 
 export default function MatchdayPage() {
   const { id } = useParams();
+  const { player } = useAuth();
   const [matchday, setMatchday] = useState(null);
   const [confirmations, setConfirmations] = useState([]);
   const [teams, setTeams] = useState([]);
   const [summary, setSummary] = useState({ playerStats: [], goalkeeperStats: [] });
 
-  useEffect(() => {
+  function load() {
     api.get(`/matchdays/${id}`).then(({ data }) => setMatchday(data));
     api.get(`/matchdays/${id}/confirmations`).then(({ data }) => setConfirmations(data));
     api.get(`/matchdays/${id}/teams`).then(({ data }) => setTeams(data));
     api.get(`/matchdays/${id}/summary`).then(({ data }) => setSummary(data));
-  }, [id]);
+  }
+
+  useEffect(load, [id]);
+
+  async function confirmPresence() {
+    try {
+      await api.post(`/matchdays/${id}/confirmations`, {});
+      toast.success('Presença confirmada!');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao confirmar presença');
+    }
+  }
 
   if (!matchday) return <p className="text-gray-400">Carregando...</p>;
 
+  const mine = confirmations.find((c) => c.player_id === player?.id);
   const nameById = Object.fromEntries(confirmations.map((c) => [c.player_id, c.name]));
-  const confirmed = confirmations.filter((c) => c.status === 'confirmed');
 
   return (
     <div className="flex flex-col gap-4">
       <Link to="/" className="text-sm text-gulag-cyan underline">← voltar</Link>
-      <h1 className="text-2xl font-bold text-gray-100">
-        {new Date(`${matchday.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
-          weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
-        })}
-      </h1>
 
-      <Card title={`Relacionados (${confirmed.length})`}>
-        {confirmed.length === 0 ? (
-          <EmptyState>Ninguém confirmado ainda.</EmptyState>
-        ) : (
-          <ul className="grid gap-1 sm:grid-cols-2 text-sm">
-            {confirmed.map((c) => (
-              <li key={c.id} className="text-gray-300">
-                {c.name} <span className="text-gray-500">({c.player_type})</span>
-              </li>
-            ))}
-          </ul>
-        )}
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-medium text-gray-100">
+              {new Date(`${matchday.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
+                weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
+              })}
+            </p>
+            <p className="text-xs text-gray-500">{STATUS_LABELS[matchday.status] || matchday.status}</p>
+          </div>
+          {matchday.status === 'open' && mine?.status !== 'confirmed' && (
+            <Button onClick={confirmPresence}>Confirmar presença</Button>
+          )}
+          {mine?.status === 'confirmed' && (
+            <span className="text-sm text-emerald-400">Presença confirmada ✓</span>
+          )}
+        </div>
       </Card>
+
+      <AtaList confirmations={confirmations} />
 
       {teams.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">

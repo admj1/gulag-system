@@ -3,7 +3,10 @@ const pool = require('../config/db');
 const { displayNameSql } = require('../config/settings');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
-  phone, email, photo_url, position, stars, role, player_type, blocked`;
+  phone, email, photo_url, position, stars, role, player_type, blocked, mensalista_number`;
+
+// Mensalistas seguem a numeracao fixa 1-20; os demais ficam em ordem alfabetica
+const PLAYER_ORDER = `mensalista_number NULLS LAST, ${displayNameSql()}`;
 
 async function list(req, res, next) {
   try {
@@ -22,7 +25,7 @@ async function list(req, res, next) {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const { rows } = await pool.query(
-      `SELECT ${PLAYER_FIELDS} FROM players ${where} ORDER BY ${displayNameSql()}`,
+      `SELECT ${PLAYER_FIELDS} FROM players ${where} ORDER BY ${PLAYER_ORDER}`,
       params
     );
     res.json(rows);
@@ -85,17 +88,26 @@ async function updateMe(req, res, next) {
 // Admin: cadastro manual de jogador (import inicial)
 async function create(req, res, next) {
   try {
-    const { first_name, last_name, nickname, phone, email, password, position, stars, player_type } = req.body;
-    if (!first_name || !last_name) {
-      return res.status(400).json({ error: 'Nome e sobrenome são obrigatórios' });
+    const {
+      first_name, last_name, nickname, phone, email, password,
+      position, stars, player_type, mensalista_number,
+    } = req.body;
+    if (!first_name) {
+      return res.status(400).json({ error: 'Nome é obrigatório' });
+    }
+
+    const number = mensalista_number ? Number(mensalista_number) : null;
+    if (number) {
+      await pool.query('UPDATE players SET mensalista_number = NULL WHERE mensalista_number = $1', [number]);
     }
 
     const passwordHash = await bcrypt.hash(password || Math.random().toString(36).slice(2), 10);
     const { rows } = await pool.query(
-      `INSERT INTO players (first_name, last_name, nickname, phone, email, password_hash, position, stars, player_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::numeric, 3), COALESCE($9, 'diarista'))
+      `INSERT INTO players (first_name, last_name, nickname, phone, email, password_hash, position, stars, player_type, mensalista_number)
+       VALUES ($1, COALESCE($2, ''), $3, $4, $5, $6, $7, COALESCE($8::numeric, 3), COALESCE($9, 'diarista'), $10)
        RETURNING ${PLAYER_FIELDS}`,
-      [first_name, last_name, nickname || null, phone, email || null, passwordHash, position || null, stars, player_type]
+      [first_name, last_name, nickname || null, phone || null, email || null, passwordHash,
+       position || null, stars, player_type, number]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -108,7 +120,17 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const { first_name, last_name, nickname, position, stars, photo_url } = req.body;
+    const { first_name, last_name, nickname, position, stars, photo_url, mensalista_number } = req.body;
+    const number = mensalista_number === '' || mensalista_number === null ? null : Number(mensalista_number);
+
+    if (number !== null && mensalista_number !== undefined) {
+      // A numeracao 1-20 e exclusiva: libera quem estiver ocupando a vaga
+      await pool.query(
+        'UPDATE players SET mensalista_number = NULL WHERE mensalista_number = $1 AND id != $2',
+        [number, req.params.id]
+      );
+    }
+
     const { rows } = await pool.query(
       `UPDATE players SET
          first_name = COALESCE($1, first_name),
@@ -116,10 +138,12 @@ async function update(req, res, next) {
          nickname = COALESCE($3, nickname),
          position = COALESCE($4, position),
          stars = COALESCE($5, stars),
-         photo_url = COALESCE($6, photo_url)
-       WHERE id = $7
+         photo_url = COALESCE($6, photo_url),
+         mensalista_number = CASE WHEN $7::boolean THEN $8::int ELSE mensalista_number END
+       WHERE id = $9
        RETURNING ${PLAYER_FIELDS}`,
-      [first_name, last_name, nickname, position, stars, photo_url, req.params.id]
+      [first_name, last_name, nickname, position, stars, photo_url,
+       mensalista_number !== undefined, number, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
     res.json(rows[0]);
@@ -164,9 +188,13 @@ async function changeStatus(req, res, next) {
       [req.params.id, player_type, start_date]
     );
 
+    // Quem deixa de ser mensalista libera a vaga numerada
     const { rows } = await pool.query(
-      `UPDATE players SET player_type = $1 WHERE id = $2
-       RETURNING id, ${displayNameSql()} AS name, player_type`,
+      `UPDATE players SET
+         player_type = $1,
+         mensalista_number = CASE WHEN $1 = 'mensalista' THEN mensalista_number ELSE NULL END
+       WHERE id = $2
+       RETURNING id, ${displayNameSql()} AS name, player_type, mensalista_number`,
       [player_type, req.params.id]
     );
     res.json(rows[0]);

@@ -17,14 +17,14 @@ async function create(req, res, next) {
   }
 }
 
-// Admin: previa do elenco padrao da ata (mensalistas + goleiros ativos)
+// Admin: previa do elenco padrao da ata (mensalistas numerados + goleiros)
 async function rosterPreview(req, res, next) {
   try {
     const { rows } = await pool.query(
-      `SELECT id, ${displayNameSql()} AS name, player_type, stars
+      `SELECT id, ${displayNameSql()} AS name, player_type, stars, mensalista_number
        FROM players
        WHERE player_type IN ('mensalista', 'goleiro') AND NOT blocked
-       ORDER BY player_type, ${displayNameSql()}`
+       ORDER BY player_type, mensalista_number NULLS LAST, ${displayNameSql()}`
     );
     res.json(rows);
   } catch (err) {
@@ -32,13 +32,14 @@ async function rosterPreview(req, res, next) {
   }
 }
 
-// Admin: cria a ata ja fechada a partir da data + elenco confirmado (permite lancamento retroativo)
+// Admin: cria a ata com todos os mensalistas e goleiros ja relacionados (pendentes de confirmacao).
+// Diaristas entram por ordem de confirmacao. Com confirm_all a ata ja nasce confirmada (lancamento retroativo).
 async function createFromRoster(req, res, next) {
   const client = await pool.connect();
   try {
-    const { match_date, player_ids = [], season_id } = req.body;
-    if (!match_date || player_ids.length === 0) {
-      return res.status(400).json({ error: 'Informe a data e ao menos um jogador' });
+    const { match_date, diarista_ids = [], season_id, confirm_all = false } = req.body;
+    if (!match_date) {
+      return res.status(400).json({ error: 'Informe a data da pelada' });
     }
 
     const settings = await getSettings();
@@ -64,18 +65,29 @@ async function createFromRoster(req, res, next) {
 
     const { rows: matchdayRows } = await client.query(
       `INSERT INTO matchdays (season_id, match_date, confirmation_deadline, status)
-       VALUES ($1, $2, ($2::date + $3::time), 'closed')
+       VALUES ($1, $2, ($2::date + $3::time), $4)
        RETURNING *`,
-      [seasonId, match_date, settings.match_time]
+      [seasonId, match_date, settings.match_time, confirm_all ? 'closed' : 'open']
     );
     const matchday = matchdayRows[0];
 
-    for (const playerId of player_ids) {
+    // Mensalistas e goleiros ja entram relacionados; ficam verdes conforme confirmam
+    await client.query(
+      `INSERT INTO confirmations (matchday_id, player_id, status)
+       SELECT $1, id, $2 FROM players
+       WHERE player_type IN ('mensalista', 'goleiro') AND NOT blocked
+       ON CONFLICT (matchday_id, player_id) DO NOTHING`,
+      [matchday.id, confirm_all ? 'confirmed' : 'pending']
+    );
+
+    let position = 0;
+    for (const playerId of diarista_ids) {
+      position += 1;
       await client.query(
-        `INSERT INTO confirmations (matchday_id, player_id, status)
-         VALUES ($1, $2, 'confirmed')
-         ON CONFLICT (matchday_id, player_id) DO UPDATE SET status = 'confirmed'`,
-        [matchday.id, playerId]
+        `INSERT INTO confirmations (matchday_id, player_id, queue_position, status)
+         VALUES ($1, $2, $3, 'confirmed')
+         ON CONFLICT (matchday_id, player_id) DO UPDATE SET status = 'confirmed', queue_position = EXCLUDED.queue_position`,
+        [matchday.id, playerId, position]
       );
     }
 
@@ -108,13 +120,14 @@ async function getById(req, res, next) {
   }
 }
 
+// Mensalistas saem na ordem fixa 1-20; diaristas na ordem em que confirmaram
 async function getConfirmations(req, res, next) {
   try {
     const { rows } = await pool.query(
-      `SELECT c.*, ${displayNameSql('p')} AS name, p.player_type, p.stars
+      `SELECT c.*, ${displayNameSql('p')} AS name, p.player_type, p.stars, p.photo_url, p.mensalista_number
        FROM confirmations c JOIN players p ON p.id = c.player_id
        WHERE c.matchday_id = $1
-       ORDER BY c.queue_position NULLS FIRST, c.confirmed_at`,
+       ORDER BY p.mensalista_number NULLS LAST, c.queue_position NULLS LAST, c.confirmed_at`,
       [req.params.id]
     );
     res.json(rows);
@@ -123,37 +136,104 @@ async function getConfirmations(req, res, next) {
   }
 }
 
-// Jogador confirma presença (mensalista direto, diarista entra na fila)
-async function confirm(req, res, next) {
+// Admin marca/desmarca a presenca de qualquer jogador na ata
+async function setConfirmation(req, res, next) {
+  const client = await pool.connect();
   try {
-    const playerId = req.user.id;
+    const { status } = req.body;
+    if (!['pending', 'confirmed', 'waitlist', 'declined'].includes(status)) {
+      return res.status(400).json({ error: 'Status inválido' });
+    }
+
+    const { rows: playerRows } = await client.query(
+      'SELECT player_type FROM players WHERE id = $1', [req.params.playerId]
+    );
+    if (!playerRows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
+
+    const queuePosition = playerRows[0].player_type === 'diarista' && status === 'confirmed'
+      ? await nextQueuePosition(client, req.params.id)
+      : null;
+
+    const { rows } = await client.query(
+      `INSERT INTO confirmations (matchday_id, player_id, status, queue_position)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (matchday_id, player_id) DO UPDATE SET
+         status = EXCLUDED.status,
+         queue_position = COALESCE(confirmations.queue_position, EXCLUDED.queue_position)
+       RETURNING *`,
+      [req.params.id, req.params.playerId, status, queuePosition]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
+// Admin remove um jogador da ata (usado para tirar diarista incluido por engano)
+async function removeConfirmation(req, res, next) {
+  try {
+    await pool.query(
+      'DELETE FROM confirmations WHERE matchday_id = $1 AND player_id = $2',
+      [req.params.id, req.params.playerId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function nextQueuePosition(client, matchdayId) {
+  const { rows } = await client.query(
+    `SELECT COALESCE(MAX(queue_position), 0) + 1 AS next FROM confirmations WHERE matchday_id = $1`,
+    [matchdayId]
+  );
+  return rows[0].next;
+}
+
+// Jogador confirma presença. Mensalista confirma a qualquer momento ate o fechamento;
+// diarista entra na fila por ordem de confirmacao.
+async function confirm(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const playerId = req.body.player_id && req.user.role === 'admin' ? req.body.player_id : req.user.id;
     const { invited_by_player_id } = req.body;
 
-    const { rows: playerRows } = await pool.query('SELECT * FROM players WHERE id = $1', [playerId]);
+    const { rows: playerRows } = await client.query('SELECT * FROM players WHERE id = $1', [playerId]);
     const player = playerRows[0];
+    if (!player) return res.status(404).json({ error: 'Jogador não encontrado' });
     if (player.blocked) {
       return res.status(403).json({ error: player.block_reason || 'Cadastro bloqueado' });
     }
 
-    let queuePosition = null;
-    if (player.player_type === 'diarista') {
-      const { rows: countRows } = await pool.query(
-        `SELECT COUNT(*)::int AS count FROM confirmations WHERE matchday_id = $1 AND queue_position IS NOT NULL`,
-        [req.params.id]
-      );
-      queuePosition = countRows[0].count + 1;
+    const { rows: matchdayRows } = await client.query(
+      'SELECT status FROM matchdays WHERE id = $1', [req.params.id]
+    );
+    if (!matchdayRows[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
+    if (matchdayRows[0].status !== 'open' && req.user.role !== 'admin') {
+      return res.status(409).json({ error: 'A lista desta pelada já foi fechada' });
     }
 
-    const { rows } = await pool.query(
+    const queuePosition = player.player_type === 'diarista'
+      ? await nextQueuePosition(client, req.params.id)
+      : null;
+
+    const { rows } = await client.query(
       `INSERT INTO confirmations (matchday_id, player_id, invited_by_player_id, queue_position, status)
-       VALUES ($1, $2, $3, $4, 'pending')
-       ON CONFLICT (matchday_id, player_id) DO UPDATE SET status = 'pending'
+       VALUES ($1, $2, $3, $4, 'confirmed')
+       ON CONFLICT (matchday_id, player_id) DO UPDATE SET
+         status = 'confirmed',
+         queue_position = COALESCE(confirmations.queue_position, EXCLUDED.queue_position),
+         confirmed_at = now()
        RETURNING *`,
       [req.params.id, playerId, invited_by_player_id || null, queuePosition]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
+  } finally {
+    client.release();
   }
 }
 
@@ -163,27 +243,41 @@ async function closeMatchday(matchdayId) {
   try {
     await client.query('BEGIN');
 
-    const { rows: mensalistas } = await client.query(
+    // Mensalistas tem prioridade e podem confirmar ate o fechamento;
+    // quem nao confirmou perde a vaga, que passa para a fila de diaristas.
+    const { rows: mensalistasConfirmados } = await client.query(
       `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
-       WHERE c.matchday_id = $1 AND p.player_type = 'mensalista'`,
+       WHERE c.matchday_id = $1 AND p.player_type = 'mensalista' AND c.status = 'confirmed'`,
       [matchdayId]
     );
-    // Goleiros nao disputam vaga entre os 20 confirmados, mas quem confirmou presenca e liberado direto
-    const { rows: goleiros } = await client.query(
-      `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
-       WHERE c.matchday_id = $1 AND p.player_type = 'goleiro'`,
+    const { rows: mensalistasAusentes } = await client.query(
+      `UPDATE confirmations c SET status = 'declined'
+       FROM players p
+       WHERE p.id = c.player_id AND c.matchday_id = $1
+         AND p.player_type = 'mensalista' AND c.status = 'pending'
+       RETURNING c.id`,
       [matchdayId]
-    );
-    await client.query(
-      `UPDATE confirmations SET status = 'confirmed' WHERE id = ANY($1::int[])`,
-      [[...mensalistas, ...goleiros].map((r) => r.id)]
     );
 
-    const vagas = Math.max(0, MAX_CONFIRMED - mensalistas.length);
+    // Goleiros nao disputam as 20 vagas; quem nao confirmou apenas sai da relacao
+    await client.query(
+      `UPDATE confirmations c SET status = 'declined'
+       FROM players p
+       WHERE p.id = c.player_id AND c.matchday_id = $1
+         AND p.player_type = 'goleiro' AND c.status = 'pending'`,
+      [matchdayId]
+    );
+    const { rows: goleiros } = await client.query(
+      `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
+       WHERE c.matchday_id = $1 AND p.player_type = 'goleiro' AND c.status = 'confirmed'`,
+      [matchdayId]
+    );
+
+    const vagas = Math.max(0, MAX_CONFIRMED - mensalistasConfirmados.length);
     const { rows: diaristas } = await client.query(
       `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
-       WHERE c.matchday_id = $1 AND p.player_type = 'diarista'
-       ORDER BY c.queue_position ASC`,
+       WHERE c.matchday_id = $1 AND p.player_type = 'diarista' AND c.status IN ('confirmed', 'waitlist')
+       ORDER BY c.queue_position ASC NULLS LAST, c.confirmed_at`,
       [matchdayId]
     );
 
@@ -200,7 +294,8 @@ async function closeMatchday(matchdayId) {
     await client.query(`UPDATE matchdays SET status = 'closed' WHERE id = $1`, [matchdayId]);
     await client.query('COMMIT');
     return {
-      mensalistas: mensalistas.length,
+      mensalistas: mensalistasConfirmados.length,
+      mensalistasSemConfirmar: mensalistasAusentes.length,
       goleiros: goleiros.length,
       diaristasConfirmados: confirmados.length,
       fila: fila.length,
@@ -412,4 +507,5 @@ async function submitSummary(req, res, next) {
 module.exports = {
   create, list, getById, getConfirmations, confirm, closeList, closeMatchday,
   drawTeams, submitSummary, getSummary, getTeams, moveTeamPlayer, rosterPreview, createFromRoster, remove,
+  setConfirmation, removeConfirmation,
 };

@@ -112,6 +112,9 @@ function NewPlayerModal({ onClose, onCreated }) {
             <option value="goleiro">Goleiro</option>
           </select>
         </Field>
+        <Field label="Número (mensalista 1-20)">
+          <input {...register('mensalista_number')} type="number" min="1" max="20" className={inputClass} />
+        </Field>
         <div className="sm:col-span-2 flex gap-2 justify-end">
           <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
           <Button disabled={formState.isSubmitting}>Cadastrar</Button>
@@ -130,6 +133,9 @@ function PlayerRow({ player, onChange }) {
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center gap-3 p-2 text-left"
       >
+        {player.mensalista_number && (
+          <span className="text-gray-500 text-sm w-5 text-right shrink-0">{player.mensalista_number}</span>
+        )}
         <Avatar src={player.photo_url} name={player.name} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="text-gray-100 truncate">{player.name}</p>
@@ -144,6 +150,7 @@ function PlayerRow({ player, onChange }) {
 
 function PlayerEditor({ player, onChange }) {
   const [stars, setStars] = useState(player.stars);
+  const [number, setNumber] = useState(player.mensalista_number ?? '');
   const [statusType, setStatusType] = useState(player.player_type);
   const [statusDate, setStatusDate] = useState(new Date().toISOString().slice(0, 10));
 
@@ -154,6 +161,16 @@ function PlayerEditor({ player, onChange }) {
       onChange();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao salvar');
+    }
+  }
+
+  async function saveNumber() {
+    try {
+      await api.put(`/players/${player.id}`, { mensalista_number: number === '' ? null : Number(number) });
+      toast.success('Numeração atualizada');
+      onChange();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao salvar numeração');
     }
   }
 
@@ -194,6 +211,17 @@ function PlayerEditor({ player, onChange }) {
             className={inputClass}
           />
           <Button variant="secondary" onClick={saveStars}>Salvar</Button>
+        </div>
+      </Field>
+
+      <Field label="Número do mensalista (1-20)">
+        <div className="flex gap-2">
+          <input
+            type="number" min="1" max="20" value={number}
+            onChange={(e) => setNumber(e.target.value)}
+            className={inputClass}
+          />
+          <Button variant="secondary" onClick={saveNumber}>Salvar</Button>
         </div>
       </Field>
 

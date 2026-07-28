@@ -108,39 +108,35 @@ export default function AdminMatchdaysPage() {
   );
 }
 
-// Lancar ATA: escolhe a data, o sistema pre-seleciona mensalistas + goleiros,
-// admin ajusta (inclusive incluindo diaristas) e confirma.
+// Lancar ATA: basta a data. Todos os mensalistas e goleiros ja entram relacionados
+// (pendentes) e vao ficando verdes conforme confirmam. Diaristas entram por ordem.
 function AtaModal({ onClose, onCreated }) {
   const navigate = useNavigate();
   const [matchDate, setMatchDate] = useState(new Date().toISOString().slice(0, 10));
   const [roster, setRoster] = useState([]);
-  const [others, setOthers] = useState([]);
-  const [selected, setSelected] = useState(new Set());
+  const [diaristas, setDiaristas] = useState([]);
+  const [selectedDiaristas, setSelectedDiaristas] = useState([]);
+  const [confirmAll, setConfirmAll] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.get('/matchdays/roster-preview').then(({ data }) => {
-      setRoster(data);
-      setSelected(new Set(data.map((p) => p.id)));
-    });
-    api.get('/players', { params: { type: 'diarista' } }).then(({ data }) => setOthers(data));
+    api.get('/matchdays/roster-preview').then(({ data }) => setRoster(data));
+    api.get('/players', { params: { type: 'diarista' } }).then(({ data }) => setDiaristas(data));
   }, []);
 
-  function toggle(id) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+  function toggleDiarista(id) {
+    setSelectedDiaristas((prev) => (
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    ));
   }
 
   async function confirm() {
-    if (selected.size === 0) return toast.error('Selecione ao menos um jogador');
     setSaving(true);
     try {
       const { data } = await api.post('/matchdays/from-roster', {
         match_date: matchDate,
-        player_ids: Array.from(selected),
+        diarista_ids: selectedDiaristas,
+        confirm_all: confirmAll,
       });
       toast.success('ATA lançada');
       onCreated();
@@ -162,41 +158,77 @@ function AtaModal({ onClose, onCreated }) {
         <Field label="Data da pelada">
           <input type="date" value={matchDate} onChange={(e) => setMatchDate(e.target.value)} className={inputClass} />
         </Field>
+
         <p className="text-xs text-gray-500">
-          Mensalistas e goleiros já vêm marcados. Desmarque quem não jogou e inclua os diaristas.
+          Os {mensalistas.length} mensalistas e {goleiros.length} goleiros já entram na ata.
+          Cada um fica verde ao confirmar; quem não confirmar até o fechamento libera a vaga
+          para os diaristas, por ordem de inscrição.
         </p>
 
-        <RosterGroup title="Mensalistas" players={mensalistas} selected={selected} onToggle={toggle} />
-        <RosterGroup title="Goleiros" players={goleiros} selected={selected} onToggle={toggle} />
-        <RosterGroup title="Diaristas" players={others} selected={selected} onToggle={toggle} />
+        <div>
+          <h3 className="text-sm font-semibold text-gray-300 mb-1">Mensalistas</h3>
+          <ol className="grid gap-0.5 sm:grid-cols-2 text-sm text-gray-400">
+            {mensalistas.map((p) => (
+              <li key={p.id}>
+                <span className="text-gray-600 mr-1">{p.mensalista_number}</span> {p.name}
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {goleiros.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-gray-300 mb-1">Goleiros</h3>
+            <ul className="grid gap-0.5 sm:grid-cols-2 text-sm text-gray-400">
+              {goleiros.map((p) => <li key={p.id}>{p.name}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {diaristas.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-gray-300 mb-1">Incluir diaristas (opcional)</h3>
+            <ul className="grid gap-1 sm:grid-cols-2">
+              {diaristas.map((p) => (
+                <li key={p.id}>
+                  <label className="flex items-center gap-2 text-sm text-gray-200 py-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedDiaristas.includes(p.id)}
+                      onChange={() => toggleDiarista(p.id)}
+                      className="w-4 h-4"
+                    />
+                    <span className="truncate">{p.name}</span>
+                    {selectedDiaristas.includes(p.id) && (
+                      <span className="text-xs text-gulag-cyan">
+                        {selectedDiaristas.indexOf(p.id) + 1}º
+                      </span>
+                    )}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <label className="flex items-center gap-2 text-sm text-gray-300">
+          <input
+            type="checkbox"
+            checked={confirmAll}
+            onChange={(e) => setConfirmAll(e.target.checked)}
+            className="w-4 h-4"
+          />
+          Já marcar todos como presentes (ata retroativa, do papel)
+        </label>
 
         <div className="flex gap-2 justify-end sticky bottom-0 bg-gulag-surface pt-2">
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
           <Button onClick={confirm} disabled={saving}>
-            Confirmar ({selected.size})
+            {saving ? 'Lançando...' : 'Confirmar'}
           </Button>
         </div>
       </div>
     </Modal>
-  );
-}
-
-function RosterGroup({ title, players, selected, onToggle }) {
-  if (players.length === 0) return null;
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-gray-300 mb-1">{title}</h3>
-      <ul className="grid gap-1 sm:grid-cols-2">
-        {players.map((p) => (
-          <li key={p.id}>
-            <label className="flex items-center gap-2 text-sm text-gray-200 py-1">
-              <input type="checkbox" checked={selected.has(p.id)} onChange={() => onToggle(p.id)} className="w-4 h-4" />
-              <span className="truncate">{p.name}</span>
-            </label>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 

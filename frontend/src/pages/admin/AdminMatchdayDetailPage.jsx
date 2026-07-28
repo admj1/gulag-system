@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
+import AtaList from '../../components/AtaList';
 import { inputClass, Button, Card, Field, ScrollArea, EmptyState } from '../../components/ui';
 
+const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
 const numberInput = 'w-14 bg-gulag-surface-2 border border-gulag-border text-gray-100 rounded px-2 py-1 text-sm text-center';
 const selectInput = 'bg-gulag-surface-2 border border-gulag-border text-gray-100 rounded px-1 py-1 text-xs';
 
@@ -17,11 +19,14 @@ export default function AdminMatchdayDetailPage() {
   const [goalkeeperStats, setGoalkeeperStats] = useState({});
   const [teamResults, setTeamResults] = useState({});
   const [saving, setSaving] = useState(false);
+  const [allDiaristas, setAllDiaristas] = useState([]);
+  const [diaristaToAdd, setDiaristaToAdd] = useState('');
 
   function load() {
     api.get(`/matchdays/${id}`).then(({ data }) => setMatchday(data));
     api.get(`/matchdays/${id}/confirmations`).then(({ data }) => setConfirmations(data));
     api.get(`/matchdays/${id}/teams`).then(({ data }) => setTeams(data));
+    api.get('/players', { params: { type: 'diarista' } }).then(({ data }) => setAllDiaristas(data));
     api.get(`/matchdays/${id}/summary`).then(({ data }) => {
       setPlayerStats(Object.fromEntries(data.playerStats.map((s) => [s.player_id, s])));
       setGoalkeeperStats(Object.fromEntries(data.goalkeeperStats.map((s) => [s.player_id, s])));
@@ -41,6 +46,42 @@ export default function AdminMatchdayDetailPage() {
   const confirmed = confirmations.filter((c) => c.status === 'confirmed');
   const linePlayers = confirmed.filter((c) => c.player_type !== 'goleiro');
   const goalkeepers = confirmed.filter((c) => c.player_type === 'goleiro');
+  const inAta = new Set(confirmations.map((c) => c.player_id));
+  const availableDiaristas = allDiaristas.filter((p) => !inAta.has(p.id));
+
+  async function toggleConfirmation(entry) {
+    const status = entry.status === 'confirmed' ? 'pending' : 'confirmed';
+    try {
+      await api.patch(`/matchdays/${id}/confirmations/${entry.player_id}`, { status });
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao alterar presença');
+    }
+  }
+
+  async function addDiarista() {
+    try {
+      await api.patch(`/matchdays/${id}/confirmations/${diaristaToAdd}`, { status: 'confirmed' });
+      setDiaristaToAdd('');
+      toast.success('Diarista incluído na ata');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao incluir diarista');
+    }
+  }
+
+  async function closeList() {
+    try {
+      const { data } = await api.post(`/matchdays/${id}/close`);
+      toast.success(
+        `Lista fechada: ${data.mensalistas} mensalistas, ${data.diaristasConfirmados} diaristas` +
+        (data.fila ? ` · ${data.fila} na espera` : '')
+      );
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao fechar lista');
+    }
+  }
 
   async function drawTeams() {
     try {
@@ -116,12 +157,42 @@ export default function AdminMatchdayDetailPage() {
       <Link to="/admin/matchdays" className="text-sm text-gulag-cyan underline">← voltar</Link>
 
       <Card>
-        <p className="font-medium text-gray-100">
-          {new Date(`${matchday.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
-            weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
-          })}
-        </p>
-        <p className="text-xs text-gray-500">{confirmed.length} relacionados</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-medium text-gray-100">
+              {new Date(`${matchday.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
+                weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
+              })}
+            </p>
+            <p className="text-xs text-gray-500">
+              {confirmed.length} confirmados · {STATUS_LABELS[matchday.status] || matchday.status}
+            </p>
+          </div>
+          {matchday.status === 'open' && (
+            <Button variant="secondary" onClick={closeList}>Fechar lista</Button>
+          )}
+        </div>
+      </Card>
+
+      <p className="text-xs text-gray-500 -mb-2">
+        Toque em um nome para marcar ou desmarcar a presença.
+      </p>
+      <AtaList confirmations={confirmations} onToggle={toggleConfirmation} canEdit />
+
+      <Card
+        title="Incluir diarista"
+      >
+        <div className="flex gap-2 flex-wrap">
+          <select
+            value={diaristaToAdd}
+            onChange={(e) => setDiaristaToAdd(e.target.value)}
+            className={`${inputClass} flex-1 min-w-[160px]`}
+          >
+            <option value="">Selecione um diarista...</option>
+            {availableDiaristas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <Button variant="secondary" onClick={addDiarista} disabled={!diaristaToAdd}>Incluir</Button>
+        </div>
       </Card>
 
       <Card

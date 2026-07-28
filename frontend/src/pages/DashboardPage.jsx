@@ -52,7 +52,7 @@ export default function DashboardPage() {
                     <Button variant="secondary">Ver ata</Button>
                   </Link>
                   {m.status === 'open' && (
-                    <Button onClick={() => confirmPresence(m.id)}>Confirmar presença</Button>
+                    <Button onClick={() => confirmPresence(m.id)}>Confirmar</Button>
                   )}
                 </div>
               </div>

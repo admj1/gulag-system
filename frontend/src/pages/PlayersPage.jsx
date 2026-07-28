@@ -48,6 +48,9 @@ export default function PlayersPage() {
                       to={`/players/${p.id}`}
                       className="flex items-center gap-3 border border-gulag-border rounded p-2 hover:border-gulag-cyan"
                     >
+                      {p.mensalista_number && (
+                        <span className="text-gray-500 text-sm w-5 text-right shrink-0">{p.mensalista_number}</span>
+                      )}
                       <Avatar src={p.photo_url} name={p.name} size="sm" />
                       <div className="min-w-0">
                         <p className="text-gray-100 truncate">{p.name}</p>
