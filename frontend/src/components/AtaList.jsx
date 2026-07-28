@@ -4,7 +4,7 @@ const TOTAL_SLOTS = 20;
 
 // Verde = confirmado. Mensalistas ficam nas vagas fixas 1-20;
 // diaristas aparecem em grupo separado, na ordem em que confirmaram.
-export default function AtaList({ confirmations, onToggle, canEdit = false }) {
+export default function AtaList({ confirmations, onToggle, canEdit = false, currentPlayerId }) {
   const mensalistas = confirmations
     .filter((c) => c.player_type === 'mensalista')
     .sort((a, b) => (a.mensalista_number ?? 99) - (b.mensalista_number ?? 99));
@@ -29,6 +29,7 @@ export default function AtaList({ confirmations, onToggle, canEdit = false }) {
               entry={c}
               onToggle={onToggle}
               canEdit={canEdit}
+              isMe={c.player_id === currentPlayerId}
             />
           ))}
         </ol>
@@ -44,7 +45,14 @@ export default function AtaList({ confirmations, onToggle, canEdit = false }) {
         ) : (
           <ol className="flex flex-col">
             {diaristas.map((c, i) => (
-              <AtaRow key={c.id} position={i + 1} entry={c} onToggle={onToggle} canEdit={canEdit} />
+              <AtaRow
+                key={c.id}
+                position={i + 1}
+                entry={c}
+                onToggle={onToggle}
+                canEdit={canEdit}
+                isMe={c.player_id === currentPlayerId}
+              />
             ))}
           </ol>
         )}
@@ -54,7 +62,14 @@ export default function AtaList({ confirmations, onToggle, canEdit = false }) {
         <Card title="Goleiros">
           <ol className="flex flex-col">
             {goleiros.map((c, i) => (
-              <AtaRow key={c.id} position={i + 1} entry={c} onToggle={onToggle} canEdit={canEdit} />
+              <AtaRow
+                key={c.id}
+                position={i + 1}
+                entry={c}
+                onToggle={onToggle}
+                canEdit={canEdit}
+                isMe={c.player_id === currentPlayerId}
+              />
             ))}
           </ol>
         </Card>
@@ -63,7 +78,7 @@ export default function AtaList({ confirmations, onToggle, canEdit = false }) {
   );
 }
 
-function AtaRow({ position, entry, onToggle, canEdit }) {
+function AtaRow({ position, entry, onToggle, canEdit, isMe = false }) {
   const isConfirmed = entry.status === 'confirmed';
   const isWaitlist = entry.status === 'waitlist';
   const isDeclined = entry.status === 'declined';
@@ -82,17 +97,20 @@ function AtaRow({ position, entry, onToggle, canEdit }) {
     <>
       <span className="text-gray-600 w-6 shrink-0 text-right">{position}</span>
       <span className={`truncate ${color}`}>{entry.name}</span>
+      {isMe && <span className="text-[10px] text-gulag-cyan border border-gulag-cyan/50 rounded px-1 shrink-0">você</span>}
       {label && <span className="text-xs text-gray-500 shrink-0">{label}</span>}
       {isConfirmed && <span className="text-emerald-400 text-xs shrink-0">✓</span>}
     </>
   );
 
+  const rowClass = `border-b border-gulag-border last:border-0 ${isMe ? 'bg-gulag-cyan/5' : ''}`;
+
   if (!canEdit) {
-    return <li className="flex items-center gap-2 py-1.5 text-sm border-b border-gulag-border last:border-0">{content}</li>;
+    return <li className={`flex items-center gap-2 py-1.5 text-sm ${rowClass}`}>{content}</li>;
   }
 
   return (
-    <li className="border-b border-gulag-border last:border-0">
+    <li className={rowClass}>
       <button
         onClick={() => onToggle(entry)}
         className="w-full flex items-center gap-2 py-2 text-sm text-left"

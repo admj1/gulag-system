@@ -63,7 +63,7 @@ export default function MatchdayPage() {
         </div>
       </Card>
 
-      <AtaList confirmations={confirmations} />
+      <AtaList confirmations={confirmations} currentPlayerId={player?.id} />
 
       {teams.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">

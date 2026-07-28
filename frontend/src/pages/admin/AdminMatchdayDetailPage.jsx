@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
 import AtaList from '../../components/AtaList';
+import { useAuth } from '../../context/AuthContext';
 import { inputClass, Button, Card, Field, ScrollArea, EmptyState } from '../../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
@@ -11,6 +12,7 @@ const selectInput = 'bg-gulag-surface-2 border border-gulag-border text-gray-100
 
 export default function AdminMatchdayDetailPage() {
   const { id } = useParams();
+  const { player } = useAuth();
   const [matchday, setMatchday] = useState(null);
   const [confirmations, setConfirmations] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -48,6 +50,8 @@ export default function AdminMatchdayDetailPage() {
   const goalkeepers = confirmed.filter((c) => c.player_type === 'goleiro');
   const inAta = new Set(confirmations.map((c) => c.player_id));
   const availableDiaristas = allDiaristas.filter((p) => !inAta.has(p.id));
+  // O admin tambem joga: precisa confirmar a propria presenca como qualquer mensalista
+  const mine = confirmations.find((c) => c.player_id === player?.id);
 
   async function toggleConfirmation(entry) {
     const status = entry.status === 'confirmed' ? 'pending' : 'confirmed';
@@ -168,16 +172,31 @@ export default function AdminMatchdayDetailPage() {
               {confirmed.length} confirmados · {STATUS_LABELS[matchday.status] || matchday.status}
             </p>
           </div>
-          {matchday.status === 'open' && (
-            <Button variant="secondary" onClick={closeList}>Fechar lista</Button>
-          )}
+          <div className="flex gap-2 flex-wrap">
+            {mine && (
+              <Button
+                variant={mine.status === 'confirmed' ? 'secondary' : 'primary'}
+                onClick={() => toggleConfirmation(mine)}
+              >
+                {mine.status === 'confirmed' ? 'Cancelar minha presença' : 'Confirmar minha presença'}
+              </Button>
+            )}
+            {matchday.status === 'open' && (
+              <Button variant="secondary" onClick={closeList}>Fechar lista</Button>
+            )}
+          </div>
         </div>
       </Card>
 
       <p className="text-xs text-gray-500 -mb-2">
         Toque em um nome para marcar ou desmarcar a presença.
       </p>
-      <AtaList confirmations={confirmations} onToggle={toggleConfirmation} canEdit />
+      <AtaList
+        confirmations={confirmations}
+        onToggle={toggleConfirmation}
+        canEdit
+        currentPlayerId={player?.id}
+      />
 
       <Card
         title="Incluir diarista"
