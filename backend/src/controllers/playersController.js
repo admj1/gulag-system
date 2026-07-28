@@ -120,10 +120,15 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const { first_name, last_name, nickname, position, stars, photo_url, mensalista_number } = req.body;
-    const number = mensalista_number === '' || mensalista_number === null ? null : Number(mensalista_number);
+    const {
+      first_name, last_name, nickname, position, stars, photo_url,
+      mensalista_number, phone, email, password,
+    } = req.body;
+    const number = mensalista_number === '' || mensalista_number === null || mensalista_number === undefined
+      ? null
+      : Number(mensalista_number);
 
-    if (number !== null && mensalista_number !== undefined) {
+    if (number !== null) {
       // A numeracao 1-20 e exclusiva: libera quem estiver ocupando a vaga
       await pool.query(
         'UPDATE players SET mensalista_number = NULL WHERE mensalista_number = $1 AND id != $2',
@@ -131,23 +136,36 @@ async function update(req, res, next) {
       );
     }
 
+    const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+
     const { rows } = await pool.query(
       `UPDATE players SET
          first_name = COALESCE($1, first_name),
          last_name = COALESCE($2, last_name),
-         nickname = COALESCE($3, nickname),
-         position = COALESCE($4, position),
-         stars = COALESCE($5, stars),
-         photo_url = COALESCE($6, photo_url),
-         mensalista_number = CASE WHEN $7::boolean THEN $8::int ELSE mensalista_number END
-       WHERE id = $9
+         nickname = CASE WHEN $3::boolean THEN NULLIF($4, '') ELSE nickname END,
+         position = COALESCE($5, position),
+         stars = COALESCE($6, stars),
+         photo_url = COALESCE($7, photo_url),
+         mensalista_number = CASE WHEN $8::boolean THEN $9::int ELSE mensalista_number END,
+         phone = CASE WHEN $10::boolean THEN NULLIF($11, '') ELSE phone END,
+         email = CASE WHEN $12::boolean THEN NULLIF($13, '') ELSE email END,
+         password_hash = COALESCE($14, password_hash)
+       WHERE id = $15
        RETURNING ${PLAYER_FIELDS}`,
-      [first_name, last_name, nickname, position, stars, photo_url,
-       mensalista_number !== undefined, number, req.params.id]
+      [first_name, last_name,
+       nickname !== undefined, nickname,
+       position, stars, photo_url,
+       mensalista_number !== undefined, number,
+       phone !== undefined, phone,
+       email !== undefined, email,
+       passwordHash, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
     res.json(rows[0]);
   } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Telefone ou e-mail já cadastrado' });
+    }
     next(err);
   }
 }

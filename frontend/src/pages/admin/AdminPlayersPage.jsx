@@ -11,10 +11,14 @@ const GROUPS = [
   { key: 'diarista', label: 'Diaristas' },
 ];
 
+// Sem telefone o jogador nao consegue entrar no sistema
+export const isIncomplete = (player) => !player.phone;
+
 export default function AdminPlayersPage() {
   const [players, setPlayers] = useState([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [onlyIncomplete, setOnlyIncomplete] = useState(false);
 
   function load() {
     api.get('/players').then(({ data }) => setPlayers(data));
@@ -24,9 +28,13 @@ export default function AdminPlayersPage() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return players;
-    return players.filter((p) => p.name.toLowerCase().includes(term));
-  }, [players, search]);
+    return players.filter((p) => {
+      if (onlyIncomplete && !isIncomplete(p)) return false;
+      return !term || p.name.toLowerCase().includes(term);
+    });
+  }, [players, search, onlyIncomplete]);
+
+  const incompleteCount = players.filter(isIncomplete).length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -39,6 +47,20 @@ export default function AdminPlayersPage() {
         />
         <Button onClick={() => setShowForm(true)}>+ Cadastrar jogador</Button>
       </div>
+
+      {incompleteCount > 0 && (
+        <Card className="border-amber-700/60">
+          <p className="text-sm text-amber-300">
+            {incompleteCount} cadastro(s) sem telefone — esses jogadores ainda não conseguem entrar
+            no sistema. Toque no nome para completar.
+          </p>
+          <div className="mt-2">
+            <Button variant="secondary" onClick={() => setOnlyIncomplete((v) => !v)}>
+              {onlyIncomplete ? 'Mostrar todos' : 'Mostrar só os incompletos'}
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {showForm && (
         <NewPlayerModal
@@ -139,7 +161,11 @@ function PlayerRow({ player, onChange }) {
         <Avatar src={player.photo_url} name={player.name} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="text-gray-100 truncate">{player.name}</p>
-          <p className="text-xs text-gray-500">{player.stars}★ {player.blocked ? '· bloqueado' : ''}</p>
+          <p className="text-xs text-gray-500">
+            {player.stars}★
+            {player.blocked ? ' · bloqueado' : ''}
+            {isIncomplete(player) && <span className="text-amber-400"> · sem telefone</span>}
+          </p>
         </div>
         <span className="text-gulag-cyan text-sm">{open ? 'fechar' : 'editar'}</span>
       </button>
@@ -149,28 +175,35 @@ function PlayerRow({ player, onChange }) {
 }
 
 function PlayerEditor({ player, onChange }) {
-  const [stars, setStars] = useState(player.stars);
-  const [number, setNumber] = useState(player.mensalista_number ?? '');
   const [statusType, setStatusType] = useState(player.player_type);
   const [statusDate, setStatusDate] = useState(new Date().toISOString().slice(0, 10));
+  const { register, handleSubmit, formState } = useForm({
+    defaultValues: {
+      first_name: player.first_name || '',
+      last_name: player.last_name || '',
+      nickname: player.nickname || '',
+      phone: player.phone || '',
+      email: player.email || '',
+      position: player.position || '',
+      stars: player.stars,
+      mensalista_number: player.mensalista_number ?? '',
+      password: '',
+    },
+  });
 
-  async function saveStars() {
+  async function saveProfile(values) {
     try {
-      await api.put(`/players/${player.id}`, { stars: Number(stars) });
-      toast.success('Estrelas atualizadas');
+      const payload = {
+        ...values,
+        stars: Number(values.stars),
+        mensalista_number: values.mensalista_number === '' ? null : Number(values.mensalista_number),
+      };
+      if (!payload.password) delete payload.password;
+      await api.put(`/players/${player.id}`, payload);
+      toast.success('Cadastro atualizado');
       onChange();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao salvar');
-    }
-  }
-
-  async function saveNumber() {
-    try {
-      await api.put(`/players/${player.id}`, { mensalista_number: number === '' ? null : Number(number) });
-      toast.success('Numeração atualizada');
-      onChange();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao salvar numeração');
+      toast.error(err.response?.data?.error || 'Erro ao salvar cadastro');
     }
   }
 
@@ -203,27 +236,44 @@ function PlayerEditor({ player, onChange }) {
 
   return (
     <div className="border-t border-gulag-border p-3 grid gap-3 sm:grid-cols-2">
-      <Field label="Estrelas">
-        <div className="flex gap-2">
-          <input
-            type="number" step="0.5" min="0" max="5" value={stars}
-            onChange={(e) => setStars(e.target.value)}
-            className={inputClass}
-          />
-          <Button variant="secondary" onClick={saveStars}>Salvar</Button>
-        </div>
-      </Field>
+      {isIncomplete(player) && (
+        <p className="sm:col-span-2 text-xs text-amber-300">
+          Informe o telefone (e uma senha inicial) para este jogador conseguir entrar no sistema.
+        </p>
+      )}
 
-      <Field label="Número do mensalista (1-20)">
-        <div className="flex gap-2">
-          <input
-            type="number" min="1" max="20" value={number}
-            onChange={(e) => setNumber(e.target.value)}
-            className={inputClass}
-          />
-          <Button variant="secondary" onClick={saveNumber}>Salvar</Button>
+      <form onSubmit={handleSubmit(saveProfile)} className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+        <Field label="Nome *">
+          <input {...register('first_name', { required: true })} className={inputClass} />
+        </Field>
+        <Field label="Sobrenome">
+          <input {...register('last_name')} className={inputClass} />
+        </Field>
+        <Field label="Apelido (usado nas listas)">
+          <input {...register('nickname')} className={inputClass} />
+        </Field>
+        <Field label="Telefone">
+          <input {...register('phone')} inputMode="tel" className={inputClass} />
+        </Field>
+        <Field label="E-mail">
+          <input {...register('email')} className={inputClass} />
+        </Field>
+        <Field label="Nova senha (deixe vazio para manter)">
+          <input {...register('password')} className={inputClass} />
+        </Field>
+        <Field label="Posição">
+          <input {...register('position')} className={inputClass} />
+        </Field>
+        <Field label="Estrelas">
+          <input {...register('stars')} type="number" step="0.5" min="0" max="5" className={inputClass} />
+        </Field>
+        <Field label="Número do mensalista (1-20)">
+          <input {...register('mensalista_number')} type="number" min="1" max="20" className={inputClass} />
+        </Field>
+        <div className="sm:col-span-2">
+          <Button disabled={formState.isSubmitting}>Salvar cadastro</Button>
         </div>
-      </Field>
+      </form>
 
       <Field label="Tipo / a partir de">
         <div className="flex gap-2 flex-wrap">
