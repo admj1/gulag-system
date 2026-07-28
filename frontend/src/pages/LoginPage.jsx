@@ -25,7 +25,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
           <input
             {...register('phone', { required: true })}
-            placeholder="Telefone"
+            placeholder="Telefone ou e-mail"
             className="bg-gulag-surface border border-gulag-border text-gray-100 placeholder-gray-500 rounded px-3 py-2 focus:outline-none focus:border-gulag-cyan"
           />
           <input

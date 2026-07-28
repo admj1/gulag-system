@@ -1,4 +1,6 @@
 require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -27,6 +29,14 @@ app.use('/api/matchdays', matchdaysRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/seasons', seasonsRoutes);
+
+const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get(/^\/(?!api\/).*/, (req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
 
 app.use((err, req, res, next) => {
   console.error(err);

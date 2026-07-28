@@ -37,12 +37,16 @@ async function register(req, res, next) {
 
 async function login(req, res, next) {
   try {
-    const { phone, password } = req.body;
-    const { rows } = await pool.query('SELECT * FROM players WHERE phone = $1', [phone]);
+    const { phone, email, password } = req.body;
+    const identifier = phone || email;
+    const { rows } = await pool.query(
+      'SELECT * FROM players WHERE phone = $1 OR email = $1',
+      [identifier]
+    );
     const player = rows[0];
 
     if (!player || !(await bcrypt.compare(password, player.password_hash))) {
-      return res.status(401).json({ error: 'Telefone ou senha inválidos' });
+      return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
     if (player.blocked) {
