@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { displayNameSql, getSettings } = require('../config/settings');
 
@@ -124,8 +125,11 @@ async function getById(req, res, next) {
 async function getConfirmations(req, res, next) {
   try {
     const { rows } = await pool.query(
-      `SELECT c.*, ${displayNameSql('p')} AS name, p.player_type, p.stars, p.photo_url, p.mensalista_number
-       FROM confirmations c JOIN players p ON p.id = c.player_id
+      `SELECT c.*, ${displayNameSql('p')} AS name, p.player_type, p.stars, p.photo_url, p.mensalista_number,
+              ${displayNameSql('inv')} AS invited_by_name
+       FROM confirmations c
+       JOIN players p ON p.id = c.player_id
+       LEFT JOIN players inv ON inv.id = c.invited_by_player_id
        WHERE c.matchday_id = $1
        ORDER BY p.mensalista_number NULLS LAST, c.queue_position NULLS LAST, c.confirmed_at`,
       [req.params.id]
@@ -133,6 +137,104 @@ async function getConfirmations(req, res, next) {
     res.json(rows);
   } catch (err) {
     next(err);
+  }
+}
+
+// Jogador desiste da propria vaga. Mensalista continua relacionado (volta a pendente);
+// diarista sai da fila, liberando a posicao para os proximos.
+async function cancelOwnConfirmation(req, res, next) {
+  try {
+    const { rows: matchdayRows } = await pool.query(
+      'SELECT status FROM matchdays WHERE id = $1', [req.params.id]
+    );
+    if (!matchdayRows[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
+    if (matchdayRows[0].status !== 'open' && req.user.role !== 'admin') {
+      return res.status(409).json({ error: 'A lista desta pelada já foi fechada' });
+    }
+
+    const { rows: playerRows } = await pool.query(
+      'SELECT player_type FROM players WHERE id = $1', [req.user.id]
+    );
+
+    if (playerRows[0]?.player_type === 'mensalista') {
+      await pool.query(
+        `UPDATE confirmations SET status = 'pending' WHERE matchday_id = $1 AND player_id = $2`,
+        [req.params.id, req.user.id]
+      );
+    } else {
+      await pool.query(
+        'DELETE FROM confirmations WHERE matchday_id = $1 AND player_id = $2',
+        [req.params.id, req.user.id]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Qualquer jogador logado pode incluir alguem na lista (diarista ou goleiro convidado).
+// Aceita um jogador ja cadastrado ou um nome novo, que entra como diarista.
+async function invitePlayer(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const { player_id, first_name, last_name, nickname, player_type } = req.body;
+
+    const { rows: matchdayRows } = await client.query(
+      'SELECT status FROM matchdays WHERE id = $1', [req.params.id]
+    );
+    if (!matchdayRows[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
+    if (matchdayRows[0].status !== 'open' && req.user.role !== 'admin') {
+      return res.status(409).json({ error: 'A lista desta pelada já foi fechada' });
+    }
+
+    await client.query('BEGIN');
+
+    let invitedId = player_id;
+    if (!invitedId) {
+      if (!first_name) {
+        return res.status(400).json({ error: 'Informe o nome de quem você quer incluir' });
+      }
+      const type = player_type === 'goleiro' ? 'goleiro' : 'diarista';
+      const passwordHash = await bcrypt.hash(Math.random().toString(36).slice(2), 10);
+      const { rows } = await client.query(
+        `INSERT INTO players (first_name, last_name, nickname, password_hash, player_type)
+         VALUES ($1, COALESCE($2, ''), $3, $4, $5) RETURNING id`,
+        [first_name, last_name, nickname || null, passwordHash, type]
+      );
+      invitedId = rows[0].id;
+    } else {
+      const { rows } = await client.query(
+        'SELECT player_type, blocked, block_reason FROM players WHERE id = $1', [invitedId]
+      );
+      if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
+      if (rows[0].blocked) {
+        return res.status(403).json({ error: rows[0].block_reason || 'Jogador bloqueado' });
+      }
+      if (rows[0].player_type === 'mensalista') {
+        return res.status(409).json({ error: 'Mensalistas já entram na lista e confirmam sozinhos' });
+      }
+    }
+
+    const queuePosition = await nextQueuePosition(client, req.params.id);
+    const { rows } = await client.query(
+      `INSERT INTO confirmations (matchday_id, player_id, invited_by_player_id, queue_position, status)
+       VALUES ($1, $2, $3, $4, 'confirmed')
+       ON CONFLICT (matchday_id, player_id) DO UPDATE SET
+         status = 'confirmed',
+         invited_by_player_id = COALESCE(confirmations.invited_by_player_id, EXCLUDED.invited_by_player_id),
+         queue_position = COALESCE(confirmations.queue_position, EXCLUDED.queue_position)
+       RETURNING *`,
+      [req.params.id, invitedId, req.user.id, queuePosition]
+    );
+
+    await client.query('COMMIT');
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
   }
 }
 
@@ -507,5 +609,5 @@ async function submitSummary(req, res, next) {
 module.exports = {
   create, list, getById, getConfirmations, confirm, closeList, closeMatchday,
   drawTeams, submitSummary, getSummary, getTeams, moveTeamPlayer, rosterPreview, createFromRoster, remove,
-  setConfirmation, removeConfirmation,
+  setConfirmation, removeConfirmation, invitePlayer, cancelOwnConfirmation,
 };

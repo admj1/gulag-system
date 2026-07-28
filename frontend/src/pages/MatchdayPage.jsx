@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import AtaList from '../components/AtaList';
+import InvitePlayer from '../components/InvitePlayer';
 import { Button, Card, ScrollArea } from '../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
@@ -15,12 +16,14 @@ export default function MatchdayPage() {
   const [confirmations, setConfirmations] = useState([]);
   const [teams, setTeams] = useState([]);
   const [summary, setSummary] = useState({ playerStats: [], goalkeeperStats: [] });
+  const [allPlayers, setAllPlayers] = useState([]);
 
   function load() {
     api.get(`/matchdays/${id}`).then(({ data }) => setMatchday(data));
     api.get(`/matchdays/${id}/confirmations`).then(({ data }) => setConfirmations(data));
     api.get(`/matchdays/${id}/teams`).then(({ data }) => setTeams(data));
     api.get(`/matchdays/${id}/summary`).then(({ data }) => setSummary(data));
+    api.get('/players').then(({ data }) => setAllPlayers(data));
   }
 
   useEffect(load, [id]);
@@ -35,35 +38,60 @@ export default function MatchdayPage() {
     }
   }
 
+  async function cancelPresence() {
+    try {
+      await api.delete(`/matchdays/${id}/confirmations/me`);
+      toast.success('Presença cancelada');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao cancelar presença');
+    }
+  }
+
   if (!matchday) return <p className="text-gray-400">Carregando...</p>;
 
   const mine = confirmations.find((c) => c.player_id === player?.id);
   const nameById = Object.fromEntries(confirmations.map((c) => [c.player_id, c.name]));
+  const inAta = new Set(confirmations.map((c) => c.player_id));
+  const candidates = allPlayers.filter((p) => p.player_type !== 'mensalista' && !inAta.has(p.id));
 
   return (
     <div className="flex flex-col gap-4">
       <Link to="/" className="text-sm text-gulag-cyan underline">← voltar</Link>
 
       <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-medium text-gray-100">
-              {new Date(`${matchday.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
-                weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
-              })}
-            </p>
-            <p className="text-xs text-gray-500">{STATUS_LABELS[matchday.status] || matchday.status}</p>
-          </div>
-          {matchday.status === 'open' && mine?.status !== 'confirmed' && (
-            <Button onClick={confirmPresence}>Confirmar presença</Button>
-          )}
-          {mine?.status === 'confirmed' && (
-            <span className="text-sm text-emerald-400">Presença confirmada ✓</span>
-          )}
-        </div>
+        <p className="font-medium text-gray-100">
+          {new Date(`${matchday.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
+            weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
+          })}
+        </p>
+        <p className="text-xs text-gray-500 mb-3">{STATUS_LABELS[matchday.status] || matchday.status}</p>
+
+        {matchday.status === 'open' ? (
+          mine?.status === 'confirmed' ? (
+            <div className="rounded bg-emerald-500/10 border border-emerald-600/40 p-3 text-center">
+              <p className="text-emerald-400 font-medium">Sua presença está confirmada ✓</p>
+              <button onClick={cancelPresence} className="text-xs text-gray-400 underline mt-1">
+                cancelar presença
+              </button>
+            </div>
+          ) : (
+            <Button onClick={confirmPresence} className="w-full text-base py-3">
+              Confirmar minha presença
+            </Button>
+          )
+        ) : (
+          mine?.status === 'confirmed' && (
+            <p className="text-sm text-emerald-400">Você estava confirmado nesta pelada ✓</p>
+          )
+        )}
       </Card>
 
       <AtaList confirmations={confirmations} currentPlayerId={player?.id} />
+
+      {matchday.status === 'open' && (
+        <InvitePlayer matchdayId={id} candidates={candidates} onInvited={load} />
+      )}
 
       {teams.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">

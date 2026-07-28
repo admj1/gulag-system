@@ -96,7 +96,14 @@ function AtaRow({ position, entry, onToggle, canEdit, isMe = false }) {
   const content = (
     <>
       <span className="text-gray-600 w-6 shrink-0 text-right">{position}</span>
-      <span className={`truncate ${color}`}>{entry.name}</span>
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate ${color}`}>{entry.name}</span>
+        {entry.invited_by_name && (
+          <span className="block text-[11px] text-gray-500 truncate">
+            convidado por {entry.invited_by_name}
+          </span>
+        )}
+      </span>
       {isMe && <span className="text-[10px] text-gulag-cyan border border-gulag-cyan/50 rounded px-1 shrink-0">você</span>}
       {label && <span className="text-xs text-gray-500 shrink-0">{label}</span>}
       {isConfirmed && <span className="text-emerald-400 text-xs shrink-0">✓</span>}

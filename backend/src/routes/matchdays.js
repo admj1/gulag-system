@@ -14,6 +14,8 @@ router.get('/:id', controller.getById);
 router.delete('/:id', requireAdmin, controller.remove);
 router.get('/:id/confirmations', controller.getConfirmations);
 router.post('/:id/confirmations', controller.confirm);
+router.post('/:id/invites', controller.invitePlayer);
+router.delete('/:id/confirmations/me', controller.cancelOwnConfirmation);
 router.patch('/:id/confirmations/:playerId', requireAdmin, controller.setConfirmation);
 router.delete('/:id/confirmations/:playerId', requireAdmin, controller.removeConfirmation);
 router.post('/:id/close', requireAdmin, controller.closeList);
