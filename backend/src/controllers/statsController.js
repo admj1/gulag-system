@@ -20,12 +20,14 @@ async function playerProfile(req, res, next) {
 
     const { rows: goalkeeperTotals } = await pool.query(
       `SELECT
-         COUNT(*) FILTER (WHERE result = 'win') AS wins,
-         COUNT(*) FILTER (WHERE result = 'loss') AS losses,
-         COUNT(*) FILTER (WHERE result = 'draw') AS draws,
+         COALESCE(SUM(wins), 0) AS wins,
+         COALESCE(SUM(losses), 0) AS losses,
+         COALESCE(SUM(draws), 0) AS draws,
          COALESCE(SUM(penalties_saved), 0) AS penalties_saved,
          COALESCE(SUM(assists), 0) AS assists,
-         COALESCE(SUM(goals), 0) AS goals
+         COALESCE(SUM(goals), 0) AS goals,
+         COALESCE(SUM(yellow_cards), 0) AS yellow_cards,
+         COALESCE(SUM(red_cards), 0) AS red_cards
        FROM goalkeeper_match_stats WHERE player_id = $1`,
       [id]
     );
@@ -92,7 +94,7 @@ async function rankings(req, res, next) {
 
     const { rows: topGoalkeepers } = await pool.query(
       `SELECT p.id, ${displayNameSql('p')} AS name,
-              COUNT(*) FILTER (WHERE g.result = 'win')::int AS wins,
+              SUM(g.wins)::int AS wins,
               SUM(g.penalties_saved)::int AS penalties_saved
        FROM goalkeeper_match_stats g
        JOIN players p ON p.id = g.player_id

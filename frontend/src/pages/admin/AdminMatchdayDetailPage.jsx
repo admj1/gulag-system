@@ -16,7 +16,7 @@ export default function AdminMatchdayDetailPage() {
   const [matchday, setMatchday] = useState(null);
   const [confirmations, setConfirmations] = useState([]);
   const [teams, setTeams] = useState([]);
-  const [numberOfTeams, setNumberOfTeams] = useState(2);
+  const [numberOfTeams, setNumberOfTeams] = useState(4);
   const [playerStats, setPlayerStats] = useState({});
   const [goalkeeperStats, setGoalkeeperStats] = useState({});
   const [teamResults, setTeamResults] = useState({});
@@ -114,6 +114,10 @@ export default function AdminMatchdayDetailPage() {
     setGoalkeeperStats((prev) => ({ ...prev, [playerId]: { ...prev[playerId], [field]: value } }));
   }
 
+  function setTeamResult(teamId, field, value) {
+    setTeamResults((prev) => ({ ...prev, [teamId]: { ...prev[teamId], [field]: value } }));
+  }
+
   async function submitSummary() {
     setSaving(true);
     try {
@@ -135,14 +139,25 @@ export default function AdminMatchdayDetailPage() {
           const s = goalkeeperStats[c.player_id] || {};
           return {
             player_id: c.player_id,
-            opponent_team_id: s.opponent_team_id ? Number(s.opponent_team_id) : null,
-            result: s.result || null,
+            wins: Number(s.wins) || 0,
+            draws: Number(s.draws) || 0,
+            losses: Number(s.losses) || 0,
             penalties_saved: Number(s.penalties_saved) || 0,
             assists: Number(s.assists) || 0,
             goals: Number(s.goals) || 0,
+            yellow_cards: Number(s.yellow_cards) || 0,
+            red_cards: Number(s.red_cards) || 0,
           };
         }),
-        teamResults: teams.map((t) => ({ team_id: t.id, result: teamResults[t.id] ?? t.result })),
+        teamResults: teams.map((t) => {
+          const r = teamResults[t.id] || {};
+          return {
+            team_id: t.id,
+            wins: Number(r.wins ?? t.wins) || 0,
+            draws: Number(r.draws ?? t.draws) || 0,
+            losses: Number(r.losses ?? t.losses) || 0,
+          };
+        }),
       };
       await api.post(`/matchdays/${id}/summary`, payload);
       toast.success('Súmula salva. Diárias e multas lançadas automaticamente.');
@@ -238,6 +253,11 @@ export default function AdminMatchdayDetailPage() {
                   <span className="text-xs text-gray-500">
                     ({t.players.reduce((s, p) => s + Number(p.stars), 0)}★)
                   </span>
+                  {(t.wins || t.draws || t.losses) > 0 && (
+                    <span className="text-xs text-gulag-cyan ml-1">
+                      {t.wins}V · {t.draws}E · {t.losses}D
+                    </span>
+                  )}
                 </p>
                 <ul className="flex flex-col gap-1">
                   {t.players.map((p) => (
@@ -255,70 +275,81 @@ export default function AdminMatchdayDetailPage() {
         )}
       </Card>
 
-      <Card title="Súmula">
-        {teams.length > 0 && (
-          <div className="flex gap-3 flex-wrap mb-4">
-            {teams.map((t) => (
-              <Field key={t.id} label={t.name}>
-                <select
-                  value={teamResults[t.id] ?? t.result ?? ''}
-                  onChange={(e) => setTeamResults((prev) => ({ ...prev, [t.id]: e.target.value }))}
-                  className={inputClass}
-                >
-                  <option value="">-</option>
-                  <option value="win">Vitória</option>
-                  <option value="draw">Empate</option>
-                  <option value="loss">Derrota</option>
-                </select>
-              </Field>
-            ))}
-          </div>
-        )}
+      <h2 className="text-lg font-semibold text-gray-100 mt-2">Súmula</h2>
 
-        <ScrollArea>
-          <table className="w-full text-sm min-w-[560px]">
-            <thead className="text-gray-400 text-left">
-              <tr>
-                <th className="pb-2">Jogador</th><th>Gols</th><th>Assist.</th>
-                <th>Amar.</th><th>Azul</th><th>Verm.</th><th>Faltou</th>
-              </tr>
-            </thead>
-            <tbody>
-              {linePlayers.map((c) => {
-                const s = playerStats[c.player_id] || {};
-                return (
-                  <tr key={c.player_id} className="text-gray-200 border-t border-gulag-border">
-                    <td className="py-1 pr-2 whitespace-nowrap">{c.name}</td>
-                    {['goals', 'assists', 'yellow_cards', 'blue_cards', 'red_cards'].map((field) => (
-                      <td key={field} className="py-1">
-                        <input
-                          type="number" min="0" inputMode="numeric" className={numberInput}
-                          value={s[field] ?? ''}
-                          onChange={(e) => setPlayerField(c.player_id, field, e.target.value)}
-                        />
-                      </td>
-                    ))}
-                    <td>
-                      <input
-                        type="checkbox" className="w-5 h-5"
-                        checked={!!s.absent}
-                        onChange={(e) => setPlayerField(c.player_id, 'absent', e.target.checked)}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </ScrollArea>
+      {teams.length === 0 ? (
+        <Card><EmptyState>Sorteie os times para lançar a súmula.</EmptyState></Card>
+      ) : (
+        teams.map((team) => {
+          const results = teamResults[team.id] || {};
+          const teamPlayers = linePlayers.filter((c) => playerTeamId[c.player_id] === team.id);
 
-        {goalkeepers.length > 0 && (
-          <ScrollArea className="mt-4">
-            <table className="w-full text-sm min-w-[560px]">
+          return (
+            <Card key={team.id} title={team.name}>
+              <div className="flex gap-2 mb-3">
+                {[['wins', 'Vitórias'], ['draws', 'Empates'], ['losses', 'Derrotas']].map(([field, label]) => (
+                  <label key={field} className="flex-1 text-center">
+                    <span className="block text-[11px] uppercase text-gray-500 mb-1">{label}</span>
+                    <input
+                      type="number" min="0" inputMode="numeric"
+                      className={`${numberInput} w-full`}
+                      value={results[field] ?? team[field] ?? ''}
+                      onChange={(e) => setTeamResult(team.id, field, e.target.value)}
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <ScrollArea>
+                <table className="w-full text-sm min-w-[520px]">
+                  <thead className="text-gray-400 text-left">
+                    <tr>
+                      <th className="pb-2">Nome</th><th>Gols</th><th>Ass.</th>
+                      <th>Amarelo</th><th>Azul</th><th>Vermelho</th><th>Faltou</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teamPlayers.map((c) => {
+                      const s = playerStats[c.player_id] || {};
+                      return (
+                        <tr key={c.player_id} className="text-gray-200 border-t border-gulag-border">
+                          <td className="py-1 pr-2 whitespace-nowrap">{c.name}</td>
+                          {['goals', 'assists', 'yellow_cards', 'blue_cards', 'red_cards'].map((field) => (
+                            <td key={field} className="py-1">
+                              <input
+                                type="number" min="0" inputMode="numeric" className={numberInput}
+                                value={s[field] ?? ''}
+                                onChange={(e) => setPlayerField(c.player_id, field, e.target.value)}
+                              />
+                            </td>
+                          ))}
+                          <td>
+                            <input
+                              type="checkbox" className="w-5 h-5"
+                              checked={!!s.absent}
+                              onChange={(e) => setPlayerField(c.player_id, 'absent', e.target.checked)}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </ScrollArea>
+              {teamPlayers.length === 0 && <EmptyState>Nenhum jogador neste time.</EmptyState>}
+            </Card>
+          );
+        })
+      )}
+
+      {goalkeepers.length > 0 && (
+        <Card title="Goleiros">
+          <ScrollArea>
+            <table className="w-full text-sm min-w-[620px]">
               <thead className="text-gray-400 text-left">
                 <tr>
-                  <th className="pb-2">Goleiro</th><th>Contra</th><th>Resultado</th>
-                  <th>Pên. def.</th><th>Assist.</th><th>Gols</th>
+                  <th className="pb-2">Nome</th><th>Vit.</th><th>Der.</th><th>Emp.</th>
+                  <th>Gols</th><th>Ass.</th><th>Pên. def.</th><th>Amarelo</th><th>Vermelho</th>
                 </tr>
               </thead>
               <tbody>
@@ -327,27 +358,7 @@ export default function AdminMatchdayDetailPage() {
                   return (
                     <tr key={c.player_id} className="text-gray-200 border-t border-gulag-border">
                       <td className="py-1 pr-2 whitespace-nowrap">{c.name}</td>
-                      <td>
-                        <select
-                          className={selectInput} value={s.opponent_team_id ?? ''}
-                          onChange={(e) => setGoalkeeperField(c.player_id, 'opponent_team_id', e.target.value)}
-                        >
-                          <option value="">-</option>
-                          {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                      </td>
-                      <td>
-                        <select
-                          className={selectInput} value={s.result ?? ''}
-                          onChange={(e) => setGoalkeeperField(c.player_id, 'result', e.target.value)}
-                        >
-                          <option value="">-</option>
-                          <option value="win">Vitória</option>
-                          <option value="draw">Empate</option>
-                          <option value="loss">Derrota</option>
-                        </select>
-                      </td>
-                      {['penalties_saved', 'assists', 'goals'].map((field) => (
+                      {['wins', 'losses', 'draws', 'goals', 'assists', 'penalties_saved', 'yellow_cards', 'red_cards'].map((field) => (
                         <td key={field} className="py-1">
                           <input
                             type="number" min="0" inputMode="numeric" className={numberInput}
@@ -362,14 +373,14 @@ export default function AdminMatchdayDetailPage() {
               </tbody>
             </table>
           </ScrollArea>
-        )}
+        </Card>
+      )}
 
-        <div className="mt-4">
-          <Button onClick={submitSummary} disabled={saving}>
-            {saving ? 'Salvando...' : 'Salvar súmula'}
-          </Button>
-        </div>
-      </Card>
+      {teams.length > 0 && (
+        <Button onClick={submitSummary} disabled={saving} className="w-full py-3 text-base">
+          {saving ? 'Salvando...' : 'Salvar súmula'}
+        </Button>
+      )}
     </div>
   );
 }

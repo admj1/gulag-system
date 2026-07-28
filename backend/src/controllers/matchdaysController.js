@@ -537,7 +537,10 @@ async function submitSummary(req, res, next) {
     const seasonId = matchdayRows[0]?.season_id || null;
 
     for (const t of teamResults) {
-      await client.query('UPDATE teams SET result = $1 WHERE id = $2', [t.result, t.team_id]);
+      await client.query(
+        'UPDATE teams SET wins = $1, draws = $2, losses = $3 WHERE id = $4 AND matchday_id = $5',
+        [Number(t.wins) || 0, Number(t.draws) || 0, Number(t.losses) || 0, t.team_id, req.params.id]
+      );
     }
 
     // Recalcula do zero: reeditar a sumula nao pode duplicar cobrancas
@@ -585,13 +588,14 @@ async function submitSummary(req, res, next) {
     for (const g of goalkeeperStats) {
       await client.query(
         `INSERT INTO goalkeeper_match_stats
-           (matchday_id, player_id, opponent_team_id, result, penalties_saved, assists, goals)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (matchday_id, player_id, wins, draws, losses, penalties_saved, assists, goals, yellow_cards, red_cards)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (matchday_id, player_id) DO UPDATE SET
-           opponent_team_id = EXCLUDED.opponent_team_id, result = EXCLUDED.result,
-           penalties_saved = EXCLUDED.penalties_saved, assists = EXCLUDED.assists, goals = EXCLUDED.goals`,
-        [req.params.id, g.player_id, g.opponent_team_id || null, g.result, g.penalties_saved || 0,
-         g.assists || 0, g.goals || 0]
+           wins = EXCLUDED.wins, draws = EXCLUDED.draws, losses = EXCLUDED.losses,
+           penalties_saved = EXCLUDED.penalties_saved, assists = EXCLUDED.assists, goals = EXCLUDED.goals,
+           yellow_cards = EXCLUDED.yellow_cards, red_cards = EXCLUDED.red_cards`,
+        [req.params.id, g.player_id, g.wins || 0, g.draws || 0, g.losses || 0,
+         g.penalties_saved || 0, g.assists || 0, g.goals || 0, g.yellow_cards || 0, g.red_cards || 0]
       );
     }
 

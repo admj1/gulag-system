@@ -93,33 +93,63 @@ export default function MatchdayPage() {
         <InvitePlayer matchdayId={id} candidates={candidates} onInvited={load} />
       )}
 
-      {teams.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {teams.map((t) => (
-            <Card key={t.id} title={t.name}>
+      {teams.map((team) => {
+        const stats = summary.playerStats.filter((s) => s.team_id === team.id);
+        return (
+          <Card
+            key={team.id}
+            title={team.name}
+            action={
+              <span className="text-xs text-gray-400">
+                {team.wins}V · {team.draws}E · {team.losses}D
+              </span>
+            }
+          >
+            {stats.length === 0 ? (
               <ul className="text-sm text-gray-300 flex flex-col gap-1">
-                {t.players.map((p) => <li key={p.id}>{p.name}</li>)}
+                {team.players.map((p) => <li key={p.id}>{p.name}</li>)}
               </ul>
-            </Card>
-          ))}
-        </div>
-      )}
+            ) : (
+              <ScrollArea>
+                <table className="w-full text-sm min-w-[380px]">
+                  <thead className="text-gray-400 text-left">
+                    <tr><th>Nome</th><th>Gols</th><th>Ass.</th><th>Cartões</th><th>Faltou</th></tr>
+                  </thead>
+                  <tbody>
+                    {stats.map((s) => (
+                      <tr key={s.id} className="text-gray-200 border-t border-gulag-border">
+                        <td className="py-1">{nameById[s.player_id] || `#${s.player_id}`}</td>
+                        <td>{s.goals}</td>
+                        <td>{s.assists}</td>
+                        <td>{s.yellow_cards + s.blue_cards + s.red_cards}</td>
+                        <td>{s.absent ? 'sim' : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollArea>
+            )}
+          </Card>
+        );
+      })}
 
-      {summary.playerStats.length > 0 && (
-        <Card title="Súmula">
+      {summary.goalkeeperStats.length > 0 && (
+        <Card title="Goleiros">
           <ScrollArea>
             <table className="w-full text-sm min-w-[420px]">
               <thead className="text-gray-400 text-left">
-                <tr><th>Jogador</th><th>Gols</th><th>Assist.</th><th>Cartões</th><th>Faltou</th></tr>
+                <tr><th>Nome</th><th>V</th><th>D</th><th>E</th><th>Gols</th><th>Ass.</th><th>Pên. def.</th></tr>
               </thead>
               <tbody>
-                {summary.playerStats.map((s) => (
+                {summary.goalkeeperStats.map((s) => (
                   <tr key={s.id} className="text-gray-200 border-t border-gulag-border">
                     <td className="py-1">{nameById[s.player_id] || `#${s.player_id}`}</td>
+                    <td>{s.wins}</td>
+                    <td>{s.losses}</td>
+                    <td>{s.draws}</td>
                     <td>{s.goals}</td>
                     <td>{s.assists}</td>
-                    <td>{s.yellow_cards + s.blue_cards + s.red_cards}</td>
-                    <td>{s.absent ? 'sim' : '-'}</td>
+                    <td>{s.penalties_saved}</td>
                   </tr>
                 ))}
               </tbody>

@@ -55,6 +55,8 @@ export default function PlayerProfilePage() {
             <Stat label="Pênaltis defendidos" value={goalkeeperTotals.penalties_saved} />
             <Stat label="Assistências" value={goalkeeperTotals.assists} />
             <Stat label="Gols" value={goalkeeperTotals.goals} />
+            <Stat label="Amarelos" value={goalkeeperTotals.yellow_cards} />
+            <Stat label="Vermelhos" value={goalkeeperTotals.red_cards} />
           </div>
         </Card>
       )}
