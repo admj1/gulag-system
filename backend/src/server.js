@@ -12,6 +12,7 @@ const matchdaysRoutes = require('./routes/matchdays');
 const financeRoutes = require('./routes/finance');
 const statsRoutes = require('./routes/stats');
 const seasonsRoutes = require('./routes/seasons');
+const settingsRoutes = require('./routes/settings');
 const { scheduleWeeklyClose } = require('./jobs/closeWeeklyList');
 
 const app = express();
@@ -23,12 +24,15 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
 app.use('/api/auth', authRoutes);
 app.use('/api/players', playersRoutes);
 app.use('/api/matchdays', matchdaysRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/seasons', seasonsRoutes);
+app.use('/api/settings', settingsRoutes);
 
 const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');
 if (fs.existsSync(frontendDist)) {

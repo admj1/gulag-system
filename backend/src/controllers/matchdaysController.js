@@ -1,7 +1,7 @@
 const pool = require('../config/db');
+const { displayNameSql, getSettings } = require('../config/settings');
 
 const MAX_CONFIRMED = 20;
-const ABSENCE_FINE = 15;
 
 async function create(req, res, next) {
   try {
@@ -14,6 +14,78 @@ async function create(req, res, next) {
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
+  }
+}
+
+// Admin: previa do elenco padrao da ata (mensalistas + goleiros ativos)
+async function rosterPreview(req, res, next) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, ${displayNameSql()} AS name, player_type, stars
+       FROM players
+       WHERE player_type IN ('mensalista', 'goleiro') AND NOT blocked
+       ORDER BY player_type, ${displayNameSql()}`
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Admin: cria a ata ja fechada a partir da data + elenco confirmado (permite lancamento retroativo)
+async function createFromRoster(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const { match_date, player_ids = [], season_id } = req.body;
+    if (!match_date || player_ids.length === 0) {
+      return res.status(400).json({ error: 'Informe a data e ao menos um jogador' });
+    }
+
+    const settings = await getSettings();
+    await client.query('BEGIN');
+
+    let seasonId = season_id || null;
+    if (!seasonId) {
+      const { rows } = await client.query(
+        `SELECT id FROM seasons WHERE year = EXTRACT(YEAR FROM $1::date) ORDER BY id LIMIT 1`,
+        [match_date]
+      );
+      seasonId = rows[0]?.id || null;
+    }
+    if (!seasonId) {
+      const { rows } = await client.query(
+        `INSERT INTO seasons (name, year, start_date)
+         VALUES (EXTRACT(YEAR FROM $1::date)::int::text, EXTRACT(YEAR FROM $1::date)::int, date_trunc('year', $1::date))
+         RETURNING id`,
+        [match_date]
+      );
+      seasonId = rows[0].id;
+    }
+
+    const { rows: matchdayRows } = await client.query(
+      `INSERT INTO matchdays (season_id, match_date, confirmation_deadline, status)
+       VALUES ($1, $2, ($2::date + $3::time), 'closed')
+       RETURNING *`,
+      [seasonId, match_date, settings.match_time]
+    );
+    const matchday = matchdayRows[0];
+
+    for (const playerId of player_ids) {
+      await client.query(
+        `INSERT INTO confirmations (matchday_id, player_id, status)
+         VALUES ($1, $2, 'confirmed')
+         ON CONFLICT (matchday_id, player_id) DO UPDATE SET status = 'confirmed'`,
+        [matchday.id, playerId]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json(matchday);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
   }
 }
 
@@ -39,7 +111,7 @@ async function getById(req, res, next) {
 async function getConfirmations(req, res, next) {
   try {
     const { rows } = await pool.query(
-      `SELECT c.*, p.name, p.player_type, p.stars
+      `SELECT c.*, ${displayNameSql('p')} AS name, p.player_type, p.stars
        FROM confirmations c JOIN players p ON p.id = c.player_id
        WHERE c.matchday_id = $1
        ORDER BY c.queue_position NULLS FIRST, c.confirmed_at`,
@@ -199,7 +271,7 @@ async function getTeams(req, res, next) {
       [req.params.id]
     );
     const { rows: teamPlayers } = await pool.query(
-      `SELECT tp.team_id, p.id, p.name, p.stars FROM team_players tp
+      `SELECT tp.team_id, p.id, ${displayNameSql('p')} AS name, p.stars FROM team_players tp
        JOIN players p ON p.id = tp.player_id
        WHERE tp.team_id = ANY($1::int[])`,
       [teams.map((t) => t.id)]
@@ -230,16 +302,52 @@ async function moveTeamPlayer(req, res, next) {
   }
 }
 
-// Admin: lançamento da súmula pós-jogo
+async function remove(req, res, next) {
+  try {
+    await pool.query('DELETE FROM payments WHERE matchday_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM matchdays WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getSummary(req, res, next) {
+  try {
+    const { rows: playerStats } = await pool.query(
+      'SELECT * FROM player_match_stats WHERE matchday_id = $1', [req.params.id]
+    );
+    const { rows: goalkeeperStats } = await pool.query(
+      'SELECT * FROM goalkeeper_match_stats WHERE matchday_id = $1', [req.params.id]
+    );
+    res.json({ playerStats, goalkeeperStats });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Admin: lançamento da súmula pós-jogo (gera multas e diarias automaticamente)
 async function submitSummary(req, res, next) {
   const client = await pool.connect();
   try {
+    const settings = await getSettings();
     await client.query('BEGIN');
     const { playerStats = [], goalkeeperStats = [], teamResults = [] } = req.body;
+
+    const { rows: matchdayRows } = await client.query(
+      'SELECT season_id FROM matchdays WHERE id = $1', [req.params.id]
+    );
+    const seasonId = matchdayRows[0]?.season_id || null;
 
     for (const t of teamResults) {
       await client.query('UPDATE teams SET result = $1 WHERE id = $2', [t.result, t.team_id]);
     }
+
+    // Recalcula do zero: reeditar a sumula nao pode duplicar cobrancas
+    await client.query(
+      `DELETE FROM payments WHERE matchday_id = $1 AND type IN ('multa', 'diaria') AND status = 'pending'`,
+      [req.params.id]
+    );
 
     for (const s of playerStats) {
       await client.query(
@@ -254,15 +362,25 @@ async function submitSummary(req, res, next) {
          s.yellow_cards || 0, s.blue_cards || 0, s.red_cards || 0, !!s.absent]
       );
 
-      // Multa automática por confirmar e faltar
+      const { rows: playerRows } = await client.query(
+        'SELECT player_type FROM players WHERE id = $1', [s.player_id]
+      );
+      const playerType = playerRows[0]?.player_type;
+      if (playerType === 'goleiro') continue; // goleiros sao isentos de qualquer cobranca
+
       if (s.absent) {
-        const { rows: seasonRows } = await client.query(
-          'SELECT season_id FROM matchdays WHERE id = $1', [req.params.id]
-        );
+        // Multa por confirmar presenca e faltar
         await client.query(
           `INSERT INTO payments (player_id, season_id, type, matchday_id, amount, status)
            VALUES ($1, $2, 'multa', $3, $4, 'pending')`,
-          [s.player_id, seasonRows[0].season_id, req.params.id, ABSENCE_FINE]
+          [s.player_id, seasonId, req.params.id, settings.absence_fine]
+        );
+      } else if (playerType === 'diarista') {
+        // Diaria de quem efetivamente jogou
+        await client.query(
+          `INSERT INTO payments (player_id, season_id, type, matchday_id, amount, status)
+           VALUES ($1, $2, 'diaria', $3, $4, 'pending')`,
+          [s.player_id, seasonId, req.params.id, settings.daily_fee]
         );
       }
     }
@@ -293,5 +411,5 @@ async function submitSummary(req, res, next) {
 
 module.exports = {
   create, list, getById, getConfirmations, confirm, closeList, closeMatchday,
-  drawTeams, submitSummary, getTeams, moveTeamPlayer,
+  drawTeams, submitSummary, getSummary, getTeams, moveTeamPlayer, rosterPreview, createFromRoster, remove,
 };

@@ -1,112 +1,147 @@
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
+import { inputClass, Button, Card, Field, EmptyState } from '../../components/ui';
 
-const inputClass = 'bg-gulag-surface-2 border border-gulag-border text-gray-100 placeholder-gray-500 rounded px-2 py-1 text-sm focus:outline-none focus:border-gulag-cyan';
+const MONTHS = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+const TYPE_LABELS = { diaria: 'diária', multa: 'multa' };
 
 export default function AdminFinancePage() {
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+  const [monthly, setMonthly] = useState([]);
   const [pending, setPending] = useState([]);
-  const [seasons, setSeasons] = useState([]);
-  const [matchdays, setMatchdays] = useState([]);
-  const monthlyForm = useForm();
-  const dailyForm = useForm();
 
-  function load() {
+  const loadMonthly = useCallback(() => {
+    api.get('/finance/monthly', { params: { month, year } }).then(({ data }) => setMonthly(data));
+  }, [month, year]);
+
+  const loadPending = useCallback(() => {
     api.get('/finance/pending').then(({ data }) => setPending(data));
-    api.get('/seasons').then(({ data }) => setSeasons(data));
-    api.get('/matchdays').then(({ data }) => setMatchdays(data));
-  }
+  }, []);
 
-  useEffect(load, []);
+  useEffect(loadMonthly, [loadMonthly]);
+  useEffect(loadPending, [loadPending]);
 
-  async function markPaid(id) {
+  async function toggleMonthly(row) {
     try {
-      await api.patch(`/finance/${id}/pay`);
-      toast.success('Pagamento registrado');
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao registrar pagamento');
-    }
-  }
-
-  async function onGenerateMonthly(values) {
-    try {
-      const { data } = await api.post('/finance/monthly-fees', {
-        season_id: Number(values.season_id),
-        month: Number(values.month),
-        year: Number(values.year),
+      await api.post('/finance/monthly', {
+        player_id: row.player_id,
+        month, year,
+        paid: row.status !== 'paid',
       });
-      toast.success(`${data.length} mensalidades geradas`);
-      load();
+      loadMonthly();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao gerar mensalidades');
+      toast.error(err.response?.data?.error || 'Erro ao atualizar mensalidade');
     }
   }
 
-  async function onChargeDaily(values) {
+  async function togglePending(item) {
     try {
-      const { data } = await api.post(`/finance/matchdays/${values.matchday_id}/daily-fees`, {
-        season_id: Number(values.season_id),
-      });
-      toast.success(`${data.length} diárias lançadas`);
-      load();
+      const action = item.status === 'paid' ? 'unpay' : 'pay';
+      await api.patch(`/finance/${item.id}/${action}`);
+      loadPending();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao lançar diárias');
+      toast.error(err.response?.data?.error || 'Erro ao atualizar cobrança');
     }
   }
 
-  const typeLabels = { mensalidade: 'Mensalidade', diaria: 'Diária', multa: 'Multa' };
+  const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - i);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="border border-gulag-border rounded p-4 bg-gulag-surface">
-        <h2 className="font-semibold text-gulag-cyan mb-3">Gerar mensalidade do mês</h2>
-        <form onSubmit={monthlyForm.handleSubmit(onGenerateMonthly)} className="grid grid-cols-4 gap-2">
-          <select {...monthlyForm.register('season_id', { required: true })} className={inputClass}>
-            <option value="">Temporada</option>
-            {seasons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          <input {...monthlyForm.register('month', { required: true })} type="number" min="1" max="12" placeholder="Mês" className={inputClass} />
-          <input {...monthlyForm.register('year', { required: true })} type="number" placeholder="Ano" className={inputClass} />
-          <button className="bg-gulag-cyan text-black font-semibold rounded px-3 py-1 text-sm">Gerar (R$50/mensalista)</button>
-        </form>
-      </div>
+    <div className="flex flex-col gap-4">
+      <Card title="Mensalidades">
+        <div className="grid gap-3 sm:grid-cols-2 mb-4">
+          <Field label="Mês">
+            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={inputClass}>
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          </Field>
+          <Field label="Ano">
+            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className={inputClass}>
+              {years.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </Field>
+        </div>
 
-      <div className="border border-gulag-border rounded p-4 bg-gulag-surface">
-        <h2 className="font-semibold text-gulag-cyan mb-3">Lançar diária da rodada</h2>
-        <form onSubmit={dailyForm.handleSubmit(onChargeDaily)} className="grid grid-cols-4 gap-2">
-          <select {...dailyForm.register('matchday_id', { required: true })} className={inputClass}>
-            <option value="">Pelada</option>
-            {matchdays.map((m) => (
-              <option key={m.id} value={m.id}>{new Date(m.match_date).toLocaleDateString('pt-BR')}</option>
+        {monthly.length === 0 ? (
+          <EmptyState>Nenhum mensalista cadastrado.</EmptyState>
+        ) : (
+          <ol className="flex flex-col gap-1">
+            {monthly.map((row, i) => (
+              <li
+                key={row.player_id}
+                className="flex items-center justify-between gap-2 border-b border-gulag-border py-2 last:border-0"
+              >
+                <span className="text-gray-200 text-sm min-w-0 truncate">
+                  {i + 1}. {row.name}
+                </span>
+                <span className="flex items-center gap-2 shrink-0">
+                  {row.status === 'paid' ? (
+                    <span className="text-xs text-emerald-400">
+                      pago em {new Date(row.paid_at).toLocaleDateString('pt-BR')}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-amber-400">em aberto</span>
+                  )}
+                  <Button
+                    variant={row.status === 'paid' ? 'secondary' : 'primary'}
+                    onClick={() => toggleMonthly(row)}
+                  >
+                    {row.status === 'paid' ? 'Desfazer' : 'Pagar'}
+                  </Button>
+                </span>
+              </li>
             ))}
-          </select>
-          <select {...dailyForm.register('season_id', { required: true })} className={inputClass}>
-            <option value="">Temporada</option>
-            {seasons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          <button className="bg-gulag-cyan text-black font-semibold rounded px-3 py-1 text-sm">Gerar (R$15/diarista)</button>
-        </form>
-      </div>
+          </ol>
+        )}
+      </Card>
 
-      <div>
-        <h2 className="font-semibold text-gulag-cyan mb-3">Pendências</h2>
-        {pending.length === 0 && <p className="text-gray-400 text-sm">Nenhuma pendência.</p>}
-        <ul className="flex flex-col gap-2">
-          {pending.map((p) => (
-            <li key={p.id} className="border border-gulag-border rounded p-3 bg-gulag-surface flex items-center justify-between">
-              <div>
-                <p className="text-gray-100">{p.name} — {typeLabels[p.type]}</p>
-                <p className="text-xs text-gray-400">R$ {Number(p.amount).toFixed(2)}</p>
+      <Card title="Diárias e multas">
+        {pending.length === 0 ? (
+          <EmptyState>Nenhuma cobrança lançada.</EmptyState>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {pending.map((group) => (
+              <div key={group.date}>
+                <h3 className="text-sm font-semibold text-gulag-cyan mb-1">
+                  {group.match_date
+                    ? new Date(`${group.match_date}T12:00:00`).toLocaleDateString('pt-BR')
+                    : 'Sem data'}
+                </h3>
+                <ol className="flex flex-col gap-1">
+                  {group.items.map((item, i) => (
+                    <li
+                      key={item.id}
+                      className="flex items-center justify-between gap-2 border-b border-gulag-border py-2 last:border-0"
+                    >
+                      <span className="text-gray-200 text-sm min-w-0 truncate">
+                        {i + 1} - {item.name} <span className="text-gray-500">({TYPE_LABELS[item.type]})</span>
+                      </span>
+                      <span className="flex items-center gap-2 shrink-0">
+                        <span className={`text-xs ${item.status === 'paid' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          R$ {Number(item.amount).toFixed(2)}
+                        </span>
+                        <Button
+                          variant={item.status === 'paid' ? 'secondary' : 'primary'}
+                          onClick={() => togglePending(item)}
+                        >
+                          {item.status === 'paid' ? 'Desfazer' : 'Pagar'}
+                        </Button>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               </div>
-              <button onClick={() => markPaid(p.id)} className="bg-gulag-cyan text-black font-semibold rounded px-3 py-1 text-sm">
-                Marcar como pago
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

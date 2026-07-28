@@ -4,14 +4,17 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
+import MatchdayPage from './pages/MatchdayPage';
 import PlayersPage from './pages/PlayersPage';
 import PlayerProfilePage from './pages/PlayerProfilePage';
+import MyProfilePage from './pages/MyProfilePage';
 import RankingsPage from './pages/RankingsPage';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminPlayersPage from './pages/admin/AdminPlayersPage';
 import AdminMatchdaysPage from './pages/admin/AdminMatchdaysPage';
 import AdminMatchdayDetailPage from './pages/admin/AdminMatchdayDetailPage';
 import AdminFinancePage from './pages/admin/AdminFinancePage';
+import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 
 export default function App() {
   return (
@@ -21,8 +24,10 @@ export default function App() {
 
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/peladas/:id" element={<MatchdayPage />} />
         <Route path="/players" element={<PlayersPage />} />
         <Route path="/players/:id" element={<PlayerProfilePage />} />
+        <Route path="/perfil" element={<MyProfilePage />} />
         <Route path="/rankings" element={<RankingsPage />} />
 
         <Route
@@ -34,6 +39,7 @@ export default function App() {
           <Route path="matchdays" element={<AdminMatchdaysPage />} />
           <Route path="matchdays/:id" element={<AdminMatchdayDetailPage />} />
           <Route path="finance" element={<AdminFinancePage />} />
+          <Route path="settings" element={<AdminSettingsPage />} />
         </Route>
       </Route>
     </Routes>

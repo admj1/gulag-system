@@ -33,8 +33,13 @@ export function AuthProvider({ children }) {
     setPlayer(null);
   }
 
+  function refreshPlayer(updated) {
+    localStorage.setItem('player', JSON.stringify(updated));
+    setPlayer(updated);
+  }
+
   return (
-    <AuthContext.Provider value={{ player, login, register, logout, isAdmin: player?.role === 'admin' }}>
+    <AuthContext.Provider value={{ player, login, register, logout, refreshPlayer, isAdmin: player?.role === 'admin' }}>
       {children}
     </AuthContext.Provider>
   );

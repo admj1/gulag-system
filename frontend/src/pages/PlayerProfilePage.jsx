@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import api from '../api/client';
+import { Card, Avatar } from '../components/ui';
 
 export default function PlayerProfilePage() {
   const { id } = useParams();
@@ -17,25 +18,37 @@ export default function PlayerProfilePage() {
   const { totals, goalkeeperTotals } = profile;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-1 text-gray-100">{player.name}</h1>
-      <p className="text-gray-400 mb-6">{player.position} · {player.player_type} · {player.stars}★</p>
+    <div className="flex flex-col gap-4">
+      <Link to="/players" className="text-sm text-gulag-cyan underline">← voltar</Link>
 
-      <h2 className="font-semibold mb-2 text-gulag-cyan">Estatísticas de linha</h2>
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <Stat label="Peladas jogadas" value={totals.peladas_jogadas} />
-        <Stat label="Gols" value={totals.goals} />
-        <Stat label="Assistências" value={totals.assists} />
-        <Stat label="Cartões amarelos" value={totals.yellow_cards} />
-        <Stat label="Cartões azuis" value={totals.blue_cards} />
-        <Stat label="Cartões vermelhos" value={totals.red_cards} />
-        <Stat label="Ausências" value={totals.absences} />
+      <div className="flex items-center gap-4">
+        <Avatar src={player.photo_url} name={player.name} size="lg" />
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-100 truncate">{player.name}</h1>
+          <p className="text-gray-400 text-sm">
+            {player.first_name} {player.last_name}
+          </p>
+          <p className="text-gray-400 text-sm">
+            {[player.position, player.player_type, `${player.stars}★`].filter(Boolean).join(' · ')}
+          </p>
+        </div>
       </div>
 
+      <Card title="Estatísticas de linha">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Stat label="Peladas jogadas" value={totals.peladas_jogadas} />
+          <Stat label="Gols" value={totals.goals} />
+          <Stat label="Assistências" value={totals.assists} />
+          <Stat label="Amarelos" value={totals.yellow_cards} />
+          <Stat label="Azuis" value={totals.blue_cards} />
+          <Stat label="Vermelhos" value={totals.red_cards} />
+          <Stat label="Ausências" value={totals.absences} />
+        </div>
+      </Card>
+
       {player.player_type === 'goleiro' && (
-        <>
-          <h2 className="font-semibold mb-2 text-gulag-cyan">Estatísticas de goleiro</h2>
-          <div className="grid grid-cols-3 gap-3">
+        <Card title="Estatísticas de goleiro">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Stat label="Vitórias" value={goalkeeperTotals.wins} />
             <Stat label="Empates" value={goalkeeperTotals.draws} />
             <Stat label="Derrotas" value={goalkeeperTotals.losses} />
@@ -43,7 +56,7 @@ export default function PlayerProfilePage() {
             <Stat label="Assistências" value={goalkeeperTotals.assists} />
             <Stat label="Gols" value={goalkeeperTotals.goals} />
           </div>
-        </>
+        </Card>
       )}
     </div>
   );
@@ -51,9 +64,9 @@ export default function PlayerProfilePage() {
 
 function Stat({ label, value }) {
   return (
-    <div className="border border-gulag-border rounded p-3 bg-gulag-surface text-center">
+    <div className="border border-gulag-border rounded p-3 bg-gulag-surface-2 text-center">
       <p className="text-2xl font-bold text-gulag-cyan">{value}</p>
-      <p className="text-sm text-gray-400">{label}</p>
+      <p className="text-xs text-gray-400">{label}</p>
     </div>
   );
 }

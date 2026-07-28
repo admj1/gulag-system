@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/client';
+import { Button, Card, EmptyState } from '../components/ui';
+
+const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
 
 export default function DashboardPage() {
   const [matchdays, setMatchdays] = useState([]);
@@ -25,24 +29,34 @@ export default function DashboardPage() {
   if (loading) return <p className="text-gray-400">Carregando...</p>;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4 text-gray-100">Próximas peladas</h1>
-      {matchdays.length === 0 && <p className="text-gray-400">Nenhuma pelada cadastrada ainda.</p>}
+    <div className="flex flex-col gap-4">
+      <h1 className="text-2xl font-bold text-gray-100">Peladas</h1>
+      {matchdays.length === 0 && (
+        <Card><EmptyState>Nenhuma pelada cadastrada ainda.</EmptyState></Card>
+      )}
       <ul className="flex flex-col gap-3">
         {matchdays.map((m) => (
-          <li key={m.id} className="border border-gulag-border rounded p-4 flex items-center justify-between bg-gulag-surface">
-            <div>
-              <p className="font-medium text-gray-100">{new Date(m.match_date).toLocaleDateString('pt-BR')}</p>
-              <p className="text-sm text-gray-400">Status: {m.status}</p>
-            </div>
-            {m.status === 'open' && (
-              <button
-                onClick={() => confirmPresence(m.id)}
-                className="bg-gulag-cyan text-black font-semibold rounded px-4 py-2 hover:bg-gulag-cyan-dark"
-              >
-                Confirmar presença
-              </button>
-            )}
+          <li key={m.id}>
+            <Card>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-medium text-gray-100">
+                    {new Date(`${m.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
+                      weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric',
+                    })}
+                  </p>
+                  <p className="text-sm text-gray-400">{STATUS_LABELS[m.status] || m.status}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Link to={`/peladas/${m.id}`}>
+                    <Button variant="secondary">Ver ata</Button>
+                  </Link>
+                  {m.status === 'open' && (
+                    <Button onClick={() => confirmPresence(m.id)}>Confirmar presença</Button>
+                  )}
+                </div>
+              </div>
+            </Card>
           </li>
         ))}
       </ul>
