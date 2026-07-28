@@ -12,16 +12,16 @@ export default function PlayerProfilePage() {
     api.get(`/stats/players/${id}`).then(({ data }) => setProfile(data));
   }, [id]);
 
-  if (!player || !profile) return <p>Carregando...</p>;
+  if (!player || !profile) return <p className="text-gray-400">Carregando...</p>;
 
   const { totals, goalkeeperTotals } = profile;
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">{player.name}</h1>
-      <p className="text-slate-500 mb-6">{player.position} · {player.player_type} · {player.stars}★</p>
+      <h1 className="text-2xl font-bold mb-1 text-gray-100">{player.name}</h1>
+      <p className="text-gray-400 mb-6">{player.position} · {player.player_type} · {player.stars}★</p>
 
-      <h2 className="font-semibold mb-2">Estatísticas de linha</h2>
+      <h2 className="font-semibold mb-2 text-gulag-cyan">Estatísticas de linha</h2>
       <div className="grid grid-cols-3 gap-3 mb-6">
         <Stat label="Peladas jogadas" value={totals.peladas_jogadas} />
         <Stat label="Gols" value={totals.goals} />
@@ -34,7 +34,7 @@ export default function PlayerProfilePage() {
 
       {player.player_type === 'goleiro' && (
         <>
-          <h2 className="font-semibold mb-2">Estatísticas de goleiro</h2>
+          <h2 className="font-semibold mb-2 text-gulag-cyan">Estatísticas de goleiro</h2>
           <div className="grid grid-cols-3 gap-3">
             <Stat label="Vitórias" value={goalkeeperTotals.wins} />
             <Stat label="Empates" value={goalkeeperTotals.draws} />
@@ -51,9 +51,9 @@ export default function PlayerProfilePage() {
 
 function Stat({ label, value }) {
   return (
-    <div className="border rounded p-3 bg-white text-center">
-      <p className="text-2xl font-bold">{value}</p>
-      <p className="text-sm text-slate-500">{label}</p>
+    <div className="border border-gulag-border rounded p-3 bg-gulag-surface text-center">
+      <p className="text-2xl font-bold text-gulag-cyan">{value}</p>
+      <p className="text-sm text-gray-400">{label}</p>
     </div>
   );
 }

@@ -1,6 +1,17 @@
 @import "tailwindcss";
 
+@theme {
+  --color-gulag-cyan: #2dd8d3;
+  --color-gulag-cyan-dark: #1aa8a4;
+  --color-gulag-bg: #0b0d10;
+  --color-gulag-surface: #16191e;
+  --color-gulag-surface-2: #1e2229;
+  --color-gulag-border: #262b33;
+}
+
 body {
   margin: 0;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: var(--color-gulag-bg);
+  color: #e5e7eb;
 }

@@ -26,6 +26,16 @@ async function list(req, res, next) {
   }
 }
 
+async function getById(req, res, next) {
+  try {
+    const { rows } = await pool.query('SELECT * FROM matchdays WHERE id = $1', [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getConfirmations(req, res, next) {
   try {
     const { rows } = await pool.query(
@@ -75,8 +85,8 @@ async function confirm(req, res, next) {
   }
 }
 
-// Admin: fecha a lista, confirma mensalistas e completa vagas com diaristas por ordem de fila
-async function closeList(req, res, next) {
+// Confirma mensalistas/goleiros e completa vagas com diaristas por ordem de fila
+async function closeMatchday(matchdayId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -84,11 +94,17 @@ async function closeList(req, res, next) {
     const { rows: mensalistas } = await client.query(
       `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
        WHERE c.matchday_id = $1 AND p.player_type = 'mensalista'`,
-      [req.params.id]
+      [matchdayId]
+    );
+    // Goleiros nao disputam vaga entre os 20 confirmados, mas quem confirmou presenca e liberado direto
+    const { rows: goleiros } = await client.query(
+      `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
+       WHERE c.matchday_id = $1 AND p.player_type = 'goleiro'`,
+      [matchdayId]
     );
     await client.query(
       `UPDATE confirmations SET status = 'confirmed' WHERE id = ANY($1::int[])`,
-      [mensalistas.map((r) => r.id)]
+      [[...mensalistas, ...goleiros].map((r) => r.id)]
     );
 
     const vagas = Math.max(0, MAX_CONFIRMED - mensalistas.length);
@@ -96,7 +112,7 @@ async function closeList(req, res, next) {
       `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
        WHERE c.matchday_id = $1 AND p.player_type = 'diarista'
        ORDER BY c.queue_position ASC`,
-      [req.params.id]
+      [matchdayId]
     );
 
     const confirmados = diaristas.slice(0, vagas).map((r) => r.id);
@@ -109,14 +125,29 @@ async function closeList(req, res, next) {
       await client.query(`UPDATE confirmations SET status = 'waitlist' WHERE id = ANY($1::int[])`, [fila]);
     }
 
-    await client.query(`UPDATE matchdays SET status = 'closed' WHERE id = $1`, [req.params.id]);
+    await client.query(`UPDATE matchdays SET status = 'closed' WHERE id = $1`, [matchdayId]);
     await client.query('COMMIT');
-    res.json({ mensalistas: mensalistas.length, diaristasConfirmados: confirmados.length, fila: fila.length });
+    return {
+      mensalistas: mensalistas.length,
+      goleiros: goleiros.length,
+      diaristasConfirmados: confirmados.length,
+      fila: fila.length,
+    };
   } catch (err) {
     await client.query('ROLLBACK');
-    next(err);
+    throw err;
   } finally {
     client.release();
+  }
+}
+
+// Admin: fecha a lista manualmente (mesma logica do job automatico de sexta 17h)
+async function closeList(req, res, next) {
+  try {
+    const summary = await closeMatchday(req.params.id);
+    res.json(summary);
+  } catch (err) {
+    next(err);
   }
 }
 
@@ -156,6 +187,44 @@ async function drawTeams(req, res, next) {
     }
 
     res.json(created);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getTeams(req, res, next) {
+  try {
+    const { rows: teams } = await pool.query(
+      'SELECT * FROM teams WHERE matchday_id = $1 ORDER BY name',
+      [req.params.id]
+    );
+    const { rows: teamPlayers } = await pool.query(
+      `SELECT tp.team_id, p.id, p.name, p.stars FROM team_players tp
+       JOIN players p ON p.id = tp.player_id
+       WHERE tp.team_id = ANY($1::int[])`,
+      [teams.map((t) => t.id)]
+    );
+    const result = teams.map((t) => ({
+      ...t,
+      players: teamPlayers.filter((p) => p.team_id === t.id),
+    }));
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Admin: move um jogador confirmado para outro time do sorteio
+async function moveTeamPlayer(req, res, next) {
+  try {
+    const { player_id, team_id } = req.body;
+    await pool.query(
+      `DELETE FROM team_players WHERE player_id = $1
+       AND team_id IN (SELECT id FROM teams WHERE matchday_id = $2)`,
+      [player_id, req.params.id]
+    );
+    await pool.query('INSERT INTO team_players (team_id, player_id) VALUES ($1, $2)', [team_id, player_id]);
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
@@ -222,4 +291,7 @@ async function submitSummary(req, res, next) {
   }
 }
 
-module.exports = { create, list, getConfirmations, confirm, closeList, drawTeams, submitSummary };
+module.exports = {
+  create, list, getById, getConfirmations, confirm, closeList, closeMatchday,
+  drawTeams, submitSummary, getTeams, moveTeamPlayer,
+};

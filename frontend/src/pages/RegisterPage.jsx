@@ -17,19 +17,25 @@ export default function RegisterPage() {
     }
   }
 
+  const inputClass = 'bg-gulag-surface border border-gulag-border text-gray-100 placeholder-gray-500 rounded px-3 py-2 focus:outline-none focus:border-gulag-cyan';
+
   return (
-    <div className="max-w-sm mx-auto mt-16">
-      <h1 className="text-2xl font-bold mb-6 text-center">Criar conta</h1>
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
-        <input {...register('name', { required: true })} placeholder="Nome" className="border rounded px-3 py-2" />
-        <input {...register('phone', { required: true })} placeholder="Telefone" className="border rounded px-3 py-2" />
-        <input {...register('email')} placeholder="E-mail (opcional)" className="border rounded px-3 py-2" />
-        <input {...register('password', { required: true })} type="password" placeholder="Senha" className="border rounded px-3 py-2" />
-        <button className="bg-emerald-700 text-white rounded py-2">Cadastrar</button>
-      </form>
-      <p className="text-sm text-center mt-4">
-        Já tem conta? <Link to="/login" className="underline">Entrar</Link>
-      </p>
+    <div className="min-h-screen bg-gulag-bg flex items-center justify-center px-4">
+      <div className="max-w-sm w-full">
+        <h1 className="text-3xl font-bold mb-8 text-center text-gulag-cyan tracking-wide">Criar conta</h1>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
+          <input {...register('name', { required: true })} placeholder="Nome" className={inputClass} />
+          <input {...register('phone', { required: true })} placeholder="Telefone" className={inputClass} />
+          <input {...register('email')} placeholder="E-mail (opcional)" className={inputClass} />
+          <input {...register('password', { required: true })} type="password" placeholder="Senha" className={inputClass} />
+          <button className="bg-gulag-cyan text-black font-semibold rounded py-2 hover:bg-gulag-cyan-dark">
+            Cadastrar
+          </button>
+        </form>
+        <p className="text-sm text-center mt-4 text-gray-400">
+          Já tem conta? <Link to="/login" className="text-gulag-cyan underline">Entrar</Link>
+        </p>
+      </div>
     </div>
   );
 }

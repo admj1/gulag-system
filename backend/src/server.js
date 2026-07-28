@@ -9,6 +9,8 @@ const playersRoutes = require('./routes/players');
 const matchdaysRoutes = require('./routes/matchdays');
 const financeRoutes = require('./routes/finance');
 const statsRoutes = require('./routes/stats');
+const seasonsRoutes = require('./routes/seasons');
+const { scheduleWeeklyClose } = require('./jobs/closeWeeklyList');
 
 const app = express();
 
@@ -24,6 +26,7 @@ app.use('/api/players', playersRoutes);
 app.use('/api/matchdays', matchdaysRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/seasons', seasonsRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
@@ -32,3 +35,4 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
+scheduleWeeklyClose();
