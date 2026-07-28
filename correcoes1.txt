@@ -1,0 +1,47 @@
+Correções gerais:
+- Jogador pode ter um apelido para ser usado nas listas e estatísticas, mas nome e sobrenome são obrigatórios. (Se não colocar apelido fica nome e sobrenome).
+- Permitir lançar súmulas retroativas que possuo anotadas em papel. (Preenchimento manual. Sistema se baseia na data para lançar nas estatísticas)
+- Jogador tem "meu perfil" onde pode alterar os dados pessoais, telefone, foto.
+- O sistema será utilizado majoritariamente em celular pelos jogadores, então precisa estar devidamente ajustado os quadros etc.
+- Faça uma aba de configurações com o valor da mensalidade, valor da diária, valor da multa, horário da pelada.
+
+Algumas correções por tela:
+Jogadores: 
+- Deverá ser dividido entre mensalistas e diaristas. Deverá ter um campo de pesquisa e de preferência deverá ser organizado em ordem alfabética.
+
+Rankings: 
+- Inclua uma coluna para goleiros e permita opção de filtrar por Mês/Ano/Temporada.
+
+Admin: 
+Jogadores: 
+- Torne Cadastrar Jogador um botão (não ficar dando opção de cadastrar e preencher os dados necessários antes de selecionar devidamente essa opção.)
+
+Peladas: 
+- Temporada segue a mesma logíca de cadastrar jogador, após clicar em um botão. temporadas deverão ser listadas na vertical e com a possibilidade de editar ou apagar.
+- Para um admin lançar a lista ou ata, só precisa confirmar a data. O horário da pelada é sempre às 07:00 então não precisa ser preenchido. Deve ser da forma mais intuitiva possível onde o ideal é o admin clicar em um botão "Lançar ATA" e o sistema mostra uma previsão dos jogadores listados (mensalistas, goleiros e permite o admin colocar algum diarista caso ele queira), após o admin verificar ele seleciona o botão Confirmar e a ata então é disponibilizada para os demais jogadores.
+
+Financeiro:
+- Não entendi como funcionaria essa opção de lançar diária da rodada, o lançamento deverá ser automático após a edição da súmula. (multas e diárias)
+- Para cobranças financeiras não faz diferença a temporada, só o mês e o ano. - Gostaria que fosse organizado uma tabela para filtrar por meses, após selecionar o mês, aparecer a lista de jogadores mensalistas e quem pagou e quem não pagou,
+
+Exemplo: 
+1- Gabriel pago em 15/07/2026
+2- Adema em aberto
+3- Mateta em aberto
+
+E assim por diante.
+
+- As pendências do diaristas/multas podem ser todas colocadas juntas e organizadas dessa forma, exemplo:
+04/07/2026
+1 - João (diária)
+2 - Gabriel (diária)
+3 - tulio (multa)
+
+11/07/2026
+1 - Davi (diária)
+2 - Golias (diária)
+3 - Adema (multa)
+
+
+
+
