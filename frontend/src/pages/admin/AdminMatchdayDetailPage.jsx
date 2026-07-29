@@ -3,12 +3,12 @@ import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
 import AtaList from '../../components/AtaList';
+import TeamDraw from '../../components/TeamDraw';
 import { useAuth } from '../../context/AuthContext';
-import { inputClass, Button, Card, Field, ScrollArea, EmptyState } from '../../components/ui';
+import { inputClass, Button, Card, ScrollArea, EmptyState } from '../../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
 const numberInput = 'w-14 bg-gulag-surface-2 border border-gulag-border text-gray-100 rounded px-2 py-1 text-sm text-center';
-const selectInput = 'bg-gulag-surface-2 border border-gulag-border text-gray-100 rounded px-1 py-1 text-xs';
 
 export default function AdminMatchdayDetailPage() {
   const { id } = useParams();
@@ -97,11 +97,24 @@ export default function AdminMatchdayDetailPage() {
     }
   }
 
+  // Move na tela na hora e so depois confirma no servidor, para o arrasto nao piscar
   async function movePlayer(playerId, teamId) {
+    const previous = teams;
+    let moved = null;
+    const optimistic = teams.map((t) => {
+      const found = t.players.find((p) => p.id === playerId);
+      if (found) moved = found;
+      return { ...t, players: t.players.filter((p) => p.id !== playerId) };
+    });
+    if (!moved) return;
+    setTeams(optimistic.map((t) => (
+      t.id === teamId ? { ...t, players: [...t.players, moved] } : t
+    )));
+
     try {
       await api.patch(`/matchdays/${id}/teams/assign`, { player_id: playerId, team_id: Number(teamId) });
-      load();
     } catch (err) {
+      setTeams(previous);
       toast.error(err.response?.data?.error || 'Erro ao mover jogador');
     }
   }
@@ -242,37 +255,7 @@ export default function AdminMatchdayDetailPage() {
           </div>
         }
       >
-        {teams.length === 0 ? (
-          <EmptyState>Times ainda não sorteados.</EmptyState>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {teams.map((t) => (
-              <div key={t.id} className="border border-gulag-border rounded p-2">
-                <p className="font-medium text-gray-100 mb-2">
-                  {t.name}{' '}
-                  <span className="text-xs text-gray-500">
-                    ({t.players.reduce((s, p) => s + Number(p.stars), 0)}★)
-                  </span>
-                  {(t.wins || t.draws || t.losses) > 0 && (
-                    <span className="text-xs text-gulag-cyan ml-1">
-                      {t.wins}V · {t.draws}E · {t.losses}D
-                    </span>
-                  )}
-                </p>
-                <ul className="flex flex-col gap-1">
-                  {t.players.map((p) => (
-                    <li key={p.id} className="flex items-center justify-between gap-2 text-sm text-gray-300">
-                      <span className="truncate">{p.name}</span>
-                      <select value={t.id} onChange={(e) => movePlayer(p.id, e.target.value)} className={selectInput}>
-                        {teams.map((opt) => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
-                      </select>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
+        <TeamDraw teams={teams} onMovePlayer={movePlayer} />
       </Card>
 
       <h2 className="text-lg font-semibold text-gray-100 mt-2">Súmula</h2>
