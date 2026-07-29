@@ -65,11 +65,21 @@ timeout /t 4 /nobreak >nul
 echo  Abrindo navegador...
 start http://localhost:3001
 
+REM Descobre o IP na rede local para acesso pelo celular
+set LAN_IP=
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"Endereco IPv4" /c:"Endereço IPv4" /c:"IPv4 Address"') do (
+    if not defined LAN_IP set LAN_IP=%%a
+)
+if defined LAN_IP set LAN_IP=%LAN_IP: =%
+
 echo.
 echo  ============================================
 echo   Sistema iniciado com sucesso!
 echo.
-echo   Acesse: http://localhost:3001
+echo   Neste computador:  http://localhost:3001
+if defined LAN_IP echo   No celular:        http://%LAN_IP%:3001
+echo.
+echo   O celular precisa estar na mesma rede Wi-Fi.
 echo  ============================================
 echo.
 echo  Para encerrar, feche a janela "Gulag System - Servidor".

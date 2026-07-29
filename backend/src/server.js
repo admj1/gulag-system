@@ -1,6 +1,7 @@
 require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -48,5 +49,18 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
+// 0.0.0.0 aceita conexoes da rede local, para abrir o sistema pelo celular
+const HOST = process.env.HOST || '0.0.0.0';
+
+app.listen(PORT, HOST, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+  console.log(`  neste computador: http://localhost:${PORT}`);
+  for (const [, addresses] of Object.entries(os.networkInterfaces())) {
+    for (const address of addresses || []) {
+      if (address.family === 'IPv4' && !address.internal) {
+        console.log(`  na rede (celular): http://${address.address}:${PORT}`);
+      }
+    }
+  }
+});
 scheduleWeeklyClose();
