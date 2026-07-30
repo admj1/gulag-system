@@ -1,6 +1,9 @@
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { displayNameSql, getSettings } = require('../config/settings');
+const {
+  sendMatchdayInvites, inviteRecipients, appBaseUrl, MAIL_CONFIGURED,
+} = require('../services/mailer');
 
 
 async function create(req, res, next) {
@@ -54,7 +57,9 @@ async function rosterPreview(req, res, next) {
 async function createFromRoster(req, res, next) {
   const client = await pool.connect();
   try {
-    const { match_date, diarista_ids = [], season_id, confirm_all = false } = req.body;
+    const {
+      match_date, diarista_ids = [], season_id, confirm_all = false, notify = true,
+    } = req.body;
     if (!match_date) {
       return res.status(400).json({ error: 'Informe a data da pelada' });
     }
@@ -93,12 +98,43 @@ async function createFromRoster(req, res, next) {
     }
 
     await client.query('COMMIT');
-    res.status(201).json(matchday);
+
+    // Aviso de confirmacao por e-mail. Vai em segundo plano de proposito: enviar
+    // 20 mensagens demora, e a ATA nao pode ficar presa esperando o servidor SMTP.
+    // Uma pelada lancada sem aviso continua valendo — da para reenviar depois.
+    let notified = { configured: MAIL_CONFIGURED, recipients: 0 };
+    if (notify && !confirm_all) {
+      const recipients = await inviteRecipients();
+      notified = { configured: MAIL_CONFIGURED, recipients: recipients.length };
+      sendMatchdayInvites(matchday.id, appBaseUrl(req))
+        .then((result) => console.log(
+          `Aviso da pelada ${matchday.id}: ${result.sent} enviados, ${result.failed} falhas`
+        ))
+        .catch((err) => console.error('Falha ao disparar os avisos por e-mail:', err));
+    }
+
+    res.status(201).json({ ...matchday, notified });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
   } finally {
     client.release();
+  }
+}
+
+// Admin: reenvia o aviso de confirmacao (SMTP fora do ar na hora do lancamento,
+// jogador incluido depois, ou simplesmente para lembrar quem nao confirmou)
+async function notifyMatchday(req, res, next) {
+  try {
+    const result = await sendMatchdayInvites(req.params.id, appBaseUrl(req));
+    if (!result.configured) {
+      return res.status(503).json({
+        error: 'Envio de e-mail não configurado no servidor (SMTP_HOST, SMTP_USER, SMTP_PASS)',
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
   }
 }
 
@@ -943,5 +979,5 @@ module.exports = {
   create, list, getById, getConfirmations, confirm, closeList, closeMatchday,
   drawTeams, submitSummary, getSummary, getTeams, moveTeamPlayer, rosterPreview, createFromRoster, remove,
   setConfirmation, removeConfirmation, invitePlayer, cancelOwnConfirmation,
-  declineOwn, createRetroactive, getLive, pushEvents,
+  declineOwn, createRetroactive, getLive, pushEvents, notifyMatchday,
 };

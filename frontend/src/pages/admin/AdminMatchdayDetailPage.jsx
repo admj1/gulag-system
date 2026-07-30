@@ -25,6 +25,7 @@ export default function AdminMatchdayDetailPage() {
   const [allDiaristas, setAllDiaristas] = useState([]);
   const [diaristaToAdd, setDiaristaToAdd] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [notifying, setNotifying] = useState(false);
 
   // Limpa o aviso ao sair da tela
   useEffect(() => () => setUnsaved(false), []);
@@ -96,6 +97,29 @@ export default function AdminMatchdayDetailPage() {
       load();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao incluir diarista');
+    }
+  }
+
+  // Reenvio manual do convite: util quando alguem entrou na lista depois
+  // ou quando o servidor de e-mail estava fora no lancamento da ATA
+  async function notifyByEmail() {
+    if (!window.confirm(
+      'Enviar o aviso de confirmação por e-mail para todo o elenco (mensalistas, goleiros e diaristas)?'
+    )) return;
+    setNotifying(true);
+    try {
+      const { data } = await api.post(`/matchdays/${id}/notify`);
+      if (data.recipients === 0) toast('Ninguém da lista tem e-mail cadastrado.');
+      else {
+        toast.success(
+          `Aviso enviado para ${data.sent} de ${data.recipients} jogador(es)`
+          + (data.failed ? ` · ${data.failed} falha(s)` : '')
+        );
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao enviar os avisos');
+    } finally {
+      setNotifying(false);
     }
   }
 
@@ -265,7 +289,12 @@ export default function AdminMatchdayDetailPage() {
               </Button>
             )}
             {matchday.status === 'open' && (
-              <Button variant="secondary" onClick={closeList}>Fechar lista</Button>
+              <>
+                <Button variant="secondary" onClick={notifyByEmail} disabled={notifying}>
+                  {notifying ? 'Enviando...' : '✉ Avisar por e-mail'}
+                </Button>
+                <Button variant="secondary" onClick={closeList}>Fechar lista</Button>
+              </>
             )}
             {teams.length > 0 && (
               <Link

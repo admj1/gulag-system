@@ -129,6 +129,7 @@ function AtaModal({ onClose, onCreated }) {
   const [roster, setRoster] = useState([]);
   const [diaristas, setDiaristas] = useState([]);
   const [selectedDiaristas, setSelectedDiaristas] = useState([]);
+  const [notify, setNotify] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -142,8 +143,17 @@ function AtaModal({ onClose, onCreated }) {
       const { data } = await api.post('/matchdays/from-roster', {
         match_date: matchDate,
         diarista_ids: selectedDiaristas,
+        notify,
       });
-      toast.success('ATA lançada');
+      const aviso = data.notified;
+      if (!notify) toast.success('ATA lançada');
+      else if (!aviso?.configured) {
+        toast.success('ATA lançada. O envio de e-mail ainda não está configurado no servidor.');
+      } else if (aviso.recipients === 0) {
+        toast.success('ATA lançada. Ninguém da lista tem e-mail cadastrado.');
+      } else {
+        toast.success(`ATA lançada. Avisando ${aviso.recipients} jogador(es) por e-mail.`);
+      }
       onCreated();
       onClose();
       navigate(`/admin/matchdays/${data.id}`);
@@ -198,6 +208,22 @@ function AtaModal({ onClose, onCreated }) {
           ordered
           emptyLabel="Nenhum diarista incluído — eles também podem se inscrever sozinhos."
         />
+
+        <label className="flex items-start gap-2 text-sm text-gray-300">
+          <input
+            type="checkbox"
+            checked={notify}
+            onChange={(e) => setNotify(e.target.checked)}
+            className="w-4 h-4 mt-0.5"
+          />
+          <span>
+            Avisar por e-mail
+            <span className="block text-xs text-gray-500">
+              Manda o convite para todo o elenco com e-mail cadastrado — mensalistas, goleiros e
+              diaristas — com o botão de confirmar presença.
+            </span>
+          </span>
+        </label>
 
         <div className="flex gap-2 justify-end sticky bottom-0 bg-gulag-surface pt-2">
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
