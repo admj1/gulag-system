@@ -245,10 +245,35 @@ function RetroactiveAtaModal({ onClose, onCreated }) {
   const [players, setPlayers] = useState([]);
   const [selected, setSelected] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [newPlayer, setNewPlayer] = useState({ first_name: '', last_name: '', player_type: 'diarista' });
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     api.get('/players').then(({ data }) => setPlayers(data));
   }, []);
+
+  // Ata antiga costuma ter goleiro avulso que nunca foi cadastrado: cria na hora
+  // e ja marca como presente, sem sair do modal.
+  async function createAndSelect() {
+    const firstName = newPlayer.first_name.trim();
+    if (firstName.length < 2) return toast.error('Informe o nome de quem jogou');
+    setCreating(true);
+    try {
+      const { data } = await api.post('/players', {
+        first_name: firstName,
+        last_name: newPlayer.last_name.trim(),
+        player_type: newPlayer.player_type,
+      });
+      setPlayers((list) => [...list, data]);
+      setSelected((list) => [...list, data.id]);
+      setNewPlayer({ first_name: '', last_name: '', player_type: newPlayer.player_type });
+      toast.success(`${data.name} cadastrado e incluído`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao cadastrar jogador');
+    } finally {
+      setCreating(false);
+    }
+  }
 
   async function confirm() {
     if (selected.length === 0) return toast.error('Selecione quem jogou nesse dia');
@@ -303,6 +328,45 @@ function RetroactiveAtaModal({ onClose, onCreated }) {
           label="Quem jogou"
           emptyLabel="Nenhum jogador selecionado ainda."
         />
+
+        <div className="border-t border-gulag-border pt-3">
+          <p className="text-sm text-gray-400">Jogou e não está cadastrado?</p>
+          <p className="text-xs text-gray-500 mb-2">
+            Cadastra na hora e já entra como presente nessa pelada. Telefone e senha ficam para
+            depois, em Jogadores — sem eles a pessoa só não consegue entrar no sistema.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Field label="Nome *">
+              <input
+                value={newPlayer.first_name}
+                onChange={(e) => setNewPlayer((p) => ({ ...p, first_name: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Sobrenome">
+              <input
+                value={newPlayer.last_name}
+                onChange={(e) => setNewPlayer((p) => ({ ...p, last_name: e.target.value }))}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Entra como">
+              <select
+                value={newPlayer.player_type}
+                onChange={(e) => setNewPlayer((p) => ({ ...p, player_type: e.target.value }))}
+                className={inputClass}
+              >
+                <option value="diarista">Diarista</option>
+                <option value="goleiro">Goleiro</option>
+              </select>
+            </Field>
+            <div className="flex items-end">
+              <Button type="button" variant="secondary" onClick={createAndSelect} disabled={creating}>
+                {creating ? 'Cadastrando...' : '+ Cadastrar e incluir'}
+              </Button>
+            </div>
+          </div>
+        </div>
 
         <div className="flex gap-2 justify-end sticky bottom-0 bg-gulag-surface pt-2">
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
