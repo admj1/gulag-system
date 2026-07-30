@@ -123,16 +123,27 @@ async function createFromRoster(req, res, next) {
 }
 
 // Admin: reenvia o aviso de confirmacao (SMTP fora do ar na hora do lancamento,
-// jogador incluido depois, ou simplesmente para lembrar quem nao confirmou)
+// jogador incluido depois, ou simplesmente para lembrar quem nao confirmou).
+// Com test = true manda so para o proprio admin, para conferir antes de
+// disparar para o grupo inteiro.
 async function notifyMatchday(req, res, next) {
   try {
-    const result = await sendMatchdayInvites(req.params.id, appBaseUrl(req));
+    const test = req.body?.test === true;
+    const result = await sendMatchdayInvites(
+      req.params.id, appBaseUrl(req), test ? { onlyPlayerId: req.user.id } : {}
+    );
+
     if (!result.configured) {
       return res.status(503).json({
         error: 'Envio de e-mail não configurado no servidor (SMTP_HOST, SMTP_USER, SMTP_PASS)',
       });
     }
-    res.json(result);
+    if (test && result.recipients === 0) {
+      return res.status(400).json({
+        error: 'Seu cadastro está sem e-mail. Preencha em "Meu perfil" para receber o teste.',
+      });
+    }
+    res.json({ ...result, test });
   } catch (err) {
     next(err);
   }

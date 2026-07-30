@@ -173,8 +173,9 @@ function InviteTemplateCard({ settings, onSaved }) {
 
       <p className="text-xs text-gray-500 mt-3">
         A versão em texto puro que acompanha a mensagem continua sendo montada pelo sistema — ela é
-        a reserva para quem lê e-mail em modo simples. Depois de salvar, dá para conferir de verdade
-        usando o botão "✉ Avisar por e-mail" na tela da pelada.
+        a reserva para quem lê e-mail em modo simples. Depois de salvar, use o botão
+        "✉ Testar em mim" na tela da pelada: ele manda o convite de verdade, só que apenas para o
+        seu e-mail.
       </p>
     </Card>
   );

@@ -25,7 +25,7 @@ export default function AdminMatchdayDetailPage() {
   const [allDiaristas, setAllDiaristas] = useState([]);
   const [diaristaToAdd, setDiaristaToAdd] = useState('');
   const [dirty, setDirty] = useState(false);
-  const [notifying, setNotifying] = useState(false);
+  const [notifying, setNotifying] = useState(null); // null | 'test' | 'all'
 
   // Limpa o aviso ao sair da tela
   useEffect(() => () => setUnsaved(false), []);
@@ -101,16 +101,23 @@ export default function AdminMatchdayDetailPage() {
   }
 
   // Reenvio manual do convite: util quando alguem entrou na lista depois
-  // ou quando o servidor de e-mail estava fora no lancamento da ATA
-  async function notifyByEmail() {
-    if (!window.confirm(
+  // ou quando o servidor de e-mail estava fora no lancamento da ATA.
+  // O teste manda so para o proprio admin, para conferir antes do disparo geral.
+  async function notifyByEmail(test) {
+    if (!test && !window.confirm(
       'Enviar o aviso de confirmação por e-mail para todo o elenco (mensalistas, goleiros e diaristas)?'
     )) return;
-    setNotifying(true);
+
+    setNotifying(test ? 'test' : 'all');
     try {
-      const { data } = await api.post(`/matchdays/${id}/notify`);
-      if (data.recipients === 0) toast('Ninguém da lista tem e-mail cadastrado.');
-      else {
+      const { data } = await api.post(`/matchdays/${id}/notify`, { test: !!test });
+      if (test) {
+        toast.success(
+          `Teste enviado só para você. No envio real iriam ${data.elenco} e-mail(s).`
+        );
+      } else if (data.recipients === 0) {
+        toast('Ninguém tem e-mail cadastrado.');
+      } else {
         toast.success(
           `Aviso enviado para ${data.sent} de ${data.recipients} jogador(es)`
           + (data.failed ? ` · ${data.failed} falha(s)` : '')
@@ -119,7 +126,7 @@ export default function AdminMatchdayDetailPage() {
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao enviar os avisos');
     } finally {
-      setNotifying(false);
+      setNotifying(null);
     }
   }
 
@@ -290,8 +297,20 @@ export default function AdminMatchdayDetailPage() {
             )}
             {matchday.status === 'open' && (
               <>
-                <Button variant="secondary" onClick={notifyByEmail} disabled={notifying}>
-                  {notifying ? 'Enviando...' : '✉ Avisar por e-mail'}
+                <Button
+                  variant="secondary"
+                  onClick={() => notifyByEmail(true)}
+                  disabled={!!notifying}
+                  title="Manda o convite só para o seu e-mail, para conferir antes"
+                >
+                  {notifying === 'test' ? 'Enviando...' : '✉ Testar em mim'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => notifyByEmail(false)}
+                  disabled={!!notifying}
+                >
+                  {notifying === 'all' ? 'Enviando...' : '✉ Avisar todos'}
                 </Button>
                 <Button variant="secondary" onClick={closeList}>Fechar lista</Button>
               </>

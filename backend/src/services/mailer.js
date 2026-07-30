@@ -163,18 +163,28 @@ async function inviteRecipients() {
 
 // Dispara o aviso de confirmacao. Um e-mail por jogador (nao expoe o endereco
 // dos outros) e uma falha individual nao interrompe o resto da lista.
-async function sendMatchdayInvites(matchdayId, baseUrl) {
+// Com onlyPlayerId, manda so para essa pessoa — e o teste do admin antes de
+// disparar para o grupo inteiro.
+async function sendMatchdayInvites(matchdayId, baseUrl, { onlyPlayerId = null } = {}) {
   const { rows: matchdays } = await pool.query(
     'SELECT id, match_date, confirmation_deadline FROM matchdays WHERE id = $1',
     [matchdayId]
   );
   const matchday = matchdays[0];
-  if (!matchday) return { configured: MAIL_CONFIGURED, recipients: 0, sent: 0, failed: 0 };
+  if (!matchday) {
+    return { configured: MAIL_CONFIGURED, recipients: 0, sent: 0, failed: 0, elenco: 0 };
+  }
 
-  const recipients = await inviteRecipients();
+  const elenco = await inviteRecipients();
+  const recipients = onlyPlayerId
+    ? elenco.filter((p) => p.id === Number(onlyPlayerId))
+    : elenco;
+
   const transport = getTransporter();
   if (!transport) {
-    return { configured: false, recipients: recipients.length, sent: 0, failed: 0 };
+    return {
+      configured: false, recipients: recipients.length, sent: 0, failed: 0, elenco: elenco.length,
+    };
   }
 
   const settings = await getSettings();
@@ -210,7 +220,7 @@ async function sendMatchdayInvites(matchdayId, baseUrl) {
     }
   }
 
-  return { configured: true, recipients: recipients.length, sent, failed };
+  return { configured: true, recipients: recipients.length, sent, failed, elenco: elenco.length };
 }
 
 module.exports = {
