@@ -38,6 +38,15 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+// Versao do que esta no ar: o app compara com a que ele carregou e avisa quem
+// esta com a pagina aberta que saiu publicacao nova. No Railway vem o commit;
+// fora dele, o horario em que o servidor subiu — que tambem muda a cada deploy.
+const DEPLOY_VERSION = process.env.RAILWAY_GIT_COMMIT_SHA
+  || process.env.RAILWAY_DEPLOYMENT_ID
+  || String(Date.now());
+
+app.get('/api/version', (req, res) => res.json({ version: DEPLOY_VERSION }));
+
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 app.use('/api/auth', authRoutes);
