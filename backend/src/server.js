@@ -19,7 +19,19 @@ const { scheduleWeeklyClose } = require('./jobs/closeWeeklyList');
 
 const app = express();
 
-app.use(helmet());
+// Atras do proxy do Railway, para o limite de requisicoes valer por pessoa
+// e nao somar todo mundo no IP do proxy
+app.set('trust proxy', 1);
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      // As fotos dos jogadores ficam no Cloudinary
+      'img-src': ["'self'", 'data:', 'https://res.cloudinary.com'],
+    },
+  },
+}));
 app.use(cors());
 app.use(express.json());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));

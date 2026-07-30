@@ -45,7 +45,20 @@ async function register(req, res, next) {
       [first_name, last_name, nickname || null, phone, email || null, passwordHash]
     );
 
-    const player = rows[0];
+    let player = rows[0];
+
+    // Banco novo: o primeiro cadastro assume como dono, senao ninguem
+    // conseguiria promover administradores depois.
+    const { rows: promoted } = await pool.query(
+      `UPDATE players SET role = 'admin', is_owner = TRUE
+       WHERE id = $1
+         AND NOT EXISTS (SELECT 1 FROM players WHERE is_owner AND id <> $1)
+         AND NOT EXISTS (SELECT 1 FROM players WHERE role = 'admin' AND id <> $1)
+       RETURNING ${PLAYER_FIELDS}`,
+      [player.id]
+    );
+    if (promoted[0]) player = promoted[0];
+
     res.status(201).json({ player, token: signToken(player) });
   } catch (err) {
     if (err.code === '23505') {

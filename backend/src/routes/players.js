@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate, requireAdmin } = require('../middleware/auth');
-const { upload } = require('../middleware/upload');
+const { upload, fileUrl } = require('../middleware/upload');
 const controller = require('../controllers/playersController');
 
 const router = express.Router();
@@ -12,7 +12,7 @@ router.get('/me', controller.getMe);
 router.put('/me', controller.updateMe);
 router.put('/me/password', controller.changeMyPassword);
 router.post('/me/photo', upload.single('photo'), (req, res) => {
-  res.status(201).json({ photo_url: `/uploads/${req.file.filename}` });
+  res.status(201).json({ photo_url: fileUrl(req.file) });
 });
 router.get('/:id', controller.getById);
 router.post('/', requireAdmin, controller.create);
