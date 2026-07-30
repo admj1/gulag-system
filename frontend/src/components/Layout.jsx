@@ -1,38 +1,136 @@
-import { NavLink, Link, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Avatar } from './ui';
 
-const linkClass = ({ isActive }) =>
-  `px-2 py-1 rounded whitespace-nowrap ${isActive ? 'text-gulag-cyan font-semibold' : 'text-gray-300 hover:text-gulag-cyan'}`;
+const LINKS = [
+  { to: '/', label: 'Peladas', icon: '⚽', end: true },
+  { to: '/players', label: 'Jogadores', icon: '👥' },
+  { to: '/rankings', label: 'Rankings', icon: '🏆' },
+  { to: '/perfil', label: 'Meu perfil', icon: '🙋' },
+];
+
+const ADMIN_LINKS = [
+  { to: '/admin/players', label: 'Jogadores', icon: '📋' },
+  { to: '/admin/matchdays', label: 'Peladas', icon: '📅' },
+  { to: '/admin/finance', label: 'Financeiro', icon: '💰' },
+  { to: '/admin/whatsapp', label: 'WhatsApp', icon: '💬' },
+  { to: '/admin/settings', label: 'Configurações', icon: '⚙️' },
+];
 
 export default function Layout() {
   const { player, isAdmin, logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
+
+  // Ao navegar, fecha a gaveta (no celular ela cobre a tela)
+  useEffect(() => setOpen(false), [location.pathname]);
+
+  // Trava a rolagem do fundo enquanto a gaveta estiver aberta no celular
+  useEffect(() => {
+    if (!open) return undefined;
+    const mobile = window.matchMedia('(max-width: 1023px)').matches;
+    if (!mobile) return undefined;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
 
   return (
-    <div className="min-h-screen bg-gulag-bg text-gray-100">
-      <header className="bg-black border-b border-gulag-cyan/30 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div className="min-h-screen bg-gulag-bg text-gray-100 lg:flex">
+      <header className="sidebar-toggle bg-black border-b border-gulag-cyan/30 sticky top-0 z-30">
+        <div className="px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={() => setOpen(true)}
+            aria-label="Abrir menu"
+            className="text-gulag-cyan text-2xl leading-none w-9 h-9 flex items-center justify-center -ml-1"
+          >
+            ☰
+          </button>
           <Link to="/" className="flex items-center gap-2 font-bold text-gulag-cyan tracking-wide">
             <img src="/logo.jpeg" alt="Gulag" className="w-8 h-8 rounded-full" />
-            <span className="hidden sm:inline">GULAG</span>
+            GULAG
           </Link>
-          <div className="flex items-center gap-2 min-w-0">
-            <Link to="/perfil" className="text-sm text-gray-400 truncate hover:text-gulag-cyan">
-              {player?.name}
-            </Link>
-            <button onClick={logout} className="text-sm text-gulag-cyan underline shrink-0">Sair</button>
-          </div>
         </div>
-        <nav className="max-w-4xl mx-auto px-4 pb-2 flex gap-1 text-sm overflow-x-auto">
-          <NavLink to="/" end className={linkClass}>Peladas</NavLink>
-          <NavLink to="/players" className={linkClass}>Jogadores</NavLink>
-          <NavLink to="/rankings" className={linkClass}>Rankings</NavLink>
-          <NavLink to="/perfil" className={linkClass}>Meu perfil</NavLink>
-          {isAdmin && <NavLink to="/admin" className={linkClass}>Admin</NavLink>}
-        </nav>
       </header>
-      <main className="max-w-4xl mx-auto px-4 py-5">
+
+      <div
+        className="sidebar-overlay fixed inset-0 bg-black/60 z-40"
+        data-open={open}
+        onClick={() => setOpen(false)}
+        aria-hidden="true"
+      />
+
+      <nav
+        className="sidebar bg-black border-r border-gulag-cyan/30 flex flex-col"
+        data-open={open}
+        aria-label="Menu principal"
+      >
+        <div className="p-4 flex items-center justify-between gap-2 border-b border-gulag-border">
+          <Link to="/" className="flex items-center gap-2 font-bold text-gulag-cyan tracking-wide">
+            <img src="/logo.jpeg" alt="Gulag" className="w-9 h-9 rounded-full" />
+            GULAG
+          </Link>
+          <button
+            onClick={() => setOpen(false)}
+            aria-label="Fechar menu"
+            className="sidebar-close text-gray-400 text-2xl leading-none px-2"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-3">
+          <SidebarGroup links={LINKS} />
+
+          {isAdmin && (
+            <>
+              <p className="px-4 pt-4 pb-1 text-[11px] uppercase tracking-wide text-gray-500">
+                Administração
+              </p>
+              <SidebarGroup links={ADMIN_LINKS} />
+            </>
+          )}
+        </div>
+
+        <div className="border-t border-gulag-border p-3">
+          <Link to="/perfil" className="flex items-center gap-2 min-w-0 mb-2">
+            <Avatar src={player?.photo_url} name={player?.name} size="sm" />
+            <span className="text-sm text-gray-300 truncate">{player?.name}</span>
+          </Link>
+          <button onClick={logout} className="text-sm text-gulag-cyan underline px-1">
+            Sair
+          </button>
+        </div>
+      </nav>
+
+      <main className="flex-1 min-w-0 px-4 py-5 lg:px-8 max-w-4xl mx-auto w-full">
         <Outlet />
       </main>
     </div>
+  );
+}
+
+function SidebarGroup({ links }) {
+  return (
+    <ul className="flex flex-col">
+      {links.map(({ to, label, icon, end }) => (
+        <li key={to}>
+          <NavLink
+            to={to}
+            end={end}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-3 text-sm border-l-2 ${
+                isActive
+                  ? 'border-gulag-cyan text-gulag-cyan bg-gulag-cyan/10 font-medium'
+                  : 'border-transparent text-gray-300 hover:text-gulag-cyan'
+              }`
+            }
+          >
+            <span aria-hidden="true">{icon}</span>
+            {label}
+          </NavLink>
+        </li>
+      ))}
+    </ul>
   );
 }

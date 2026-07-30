@@ -1,36 +1,43 @@
 import { Card, EmptyState } from './ui';
 
-const TOTAL_SLOTS = 20;
-
-// Verde = confirmado. Mensalistas ficam nas vagas fixas 1-20;
-// diaristas aparecem em grupo separado, na ordem em que confirmaram.
-export default function AtaList({ confirmations, onToggle, canEdit = false, currentPlayerId }) {
+// Verde = confirmado. Mensalistas aparecem na sua numeracao fixa;
+// diaristas ficam em grupo separado, na ordem em que confirmaram.
+export default function AtaList({
+  confirmations,
+  onToggle,
+  onRemove,
+  canEdit = false,
+  currentPlayerId,
+  isAdmin = false,
+}) {
   const mensalistas = confirmations
     .filter((c) => c.player_type === 'mensalista')
-    .sort((a, b) => (a.mensalista_number ?? 99) - (b.mensalista_number ?? 99));
+    .sort((a, b) => (a.mensalista_number ?? 999) - (b.mensalista_number ?? 999));
 
   const goleiros = confirmations.filter((c) => c.player_type === 'goleiro');
 
   const diaristas = confirmations
     .filter((c) => c.player_type === 'diarista')
-    .sort((a, b) => (a.queue_position ?? 99) - (b.queue_position ?? 99));
+    .sort((a, b) => (a.queue_position ?? 999) - (b.queue_position ?? 999));
 
   const confirmedMensalistas = mensalistas.filter((c) => c.status === 'confirmed').length;
-  const vagasLivres = Math.max(0, TOTAL_SLOTS - confirmedMensalistas);
+  // Nao ha numero fixo de vagas: cada mensalista que nao confirmar libera a dele
+  const vagasLivres = Math.max(0, mensalistas.length - confirmedMensalistas);
+
+  // Quem incluiu alguem pode retirar essa pessoa se ela desistir
+  const canRemove = (entry) =>
+    !!onRemove &&
+    entry.player_type !== 'mensalista' &&
+    (isAdmin || (currentPlayerId && entry.invited_by_player_id === currentPlayerId));
+
+  const rowProps = { onToggle, onRemove, canEdit, currentPlayerId, canRemove };
 
   return (
     <div className="flex flex-col gap-4">
-      <Card title={`Mensalistas (${confirmedMensalistas}/${TOTAL_SLOTS})`}>
+      <Card title={`Mensalistas (${confirmedMensalistas}/${mensalistas.length})`}>
         <ol className="flex flex-col">
           {mensalistas.map((c) => (
-            <AtaRow
-              key={c.id}
-              position={c.mensalista_number}
-              entry={c}
-              onToggle={onToggle}
-              canEdit={canEdit}
-              isMe={c.player_id === currentPlayerId}
-            />
+            <AtaRow key={c.id} position={c.mensalista_number} entry={c} {...rowProps} />
           ))}
         </ol>
         {mensalistas.length === 0 && <EmptyState>Nenhum mensalista relacionado.</EmptyState>}
@@ -45,14 +52,7 @@ export default function AtaList({ confirmations, onToggle, canEdit = false, curr
         ) : (
           <ol className="flex flex-col">
             {diaristas.map((c, i) => (
-              <AtaRow
-                key={c.id}
-                position={i + 1}
-                entry={c}
-                onToggle={onToggle}
-                canEdit={canEdit}
-                isMe={c.player_id === currentPlayerId}
-              />
+              <AtaRow key={c.id} position={i + 1} entry={c} {...rowProps} />
             ))}
           </ol>
         )}
@@ -62,14 +62,7 @@ export default function AtaList({ confirmations, onToggle, canEdit = false, curr
         <Card title="Goleiros">
           <ol className="flex flex-col">
             {goleiros.map((c, i) => (
-              <AtaRow
-                key={c.id}
-                position={i + 1}
-                entry={c}
-                onToggle={onToggle}
-                canEdit={canEdit}
-                isMe={c.player_id === currentPlayerId}
-              />
+              <AtaRow key={c.id} position={i + 1} entry={c} {...rowProps} />
             ))}
           </ol>
         </Card>
@@ -78,7 +71,8 @@ export default function AtaList({ confirmations, onToggle, canEdit = false, curr
   );
 }
 
-function AtaRow({ position, entry, onToggle, canEdit, isMe = false }) {
+function AtaRow({ position, entry, onToggle, onRemove, canEdit, currentPlayerId, canRemove }) {
+  const isMe = entry.player_id === currentPlayerId;
   const isConfirmed = entry.status === 'confirmed';
   const isWaitlist = entry.status === 'waitlist';
   const isDeclined = entry.status === 'declined';
@@ -92,6 +86,7 @@ function AtaRow({ position, entry, onToggle, canEdit, isMe = false }) {
         : 'text-gray-400';
 
   const label = isWaitlist ? 'espera' : isDeclined ? 'não confirmou' : null;
+  const removable = canRemove(entry);
 
   const content = (
     <>
@@ -112,18 +107,29 @@ function AtaRow({ position, entry, onToggle, canEdit, isMe = false }) {
 
   const rowClass = `border-b border-gulag-border last:border-0 ${isMe ? 'bg-gulag-cyan/5' : ''}`;
 
-  if (!canEdit) {
-    return <li className={`flex items-center gap-2 py-1.5 text-sm ${rowClass}`}>{content}</li>;
-  }
-
   return (
-    <li className={rowClass}>
-      <button
-        onClick={() => onToggle(entry)}
-        className="w-full flex items-center gap-2 py-2 text-sm text-left"
-      >
-        {content}
-      </button>
+    <li className={`${rowClass} flex items-center gap-1`}>
+      {canEdit ? (
+        <button
+          onClick={() => onToggle(entry)}
+          className="flex-1 min-w-0 flex items-center gap-2 py-2 text-sm text-left"
+        >
+          {content}
+        </button>
+      ) : (
+        <span className="flex-1 min-w-0 flex items-center gap-2 py-1.5 text-sm">{content}</span>
+      )}
+
+      {removable && (
+        <button
+          onClick={() => onRemove(entry)}
+          title={`Retirar ${entry.name} da lista`}
+          aria-label={`Retirar ${entry.name} da lista`}
+          className="shrink-0 text-red-400 hover:text-red-300 px-2 py-1 text-lg leading-none"
+        >
+          ×
+        </button>
+      )}
     </li>
   );
 }

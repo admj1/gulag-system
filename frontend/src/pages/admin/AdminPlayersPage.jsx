@@ -134,8 +134,8 @@ function NewPlayerModal({ onClose, onCreated }) {
             <option value="goleiro">Goleiro</option>
           </select>
         </Field>
-        <Field label="Número (mensalista 1-20)">
-          <input {...register('mensalista_number')} type="number" min="1" max="20" className={inputClass} />
+        <Field label="Número (mensalista 1-99)">
+          <input {...register('mensalista_number')} type="number" min="1" max="99" className={inputClass} />
         </Field>
         <div className="sm:col-span-2 flex gap-2 justify-end">
           <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
@@ -267,8 +267,8 @@ function PlayerEditor({ player, onChange }) {
         <Field label="Estrelas">
           <input {...register('stars')} type="number" step="0.5" min="0" max="5" className={inputClass} />
         </Field>
-        <Field label="Número do mensalista (1-20)">
-          <input {...register('mensalista_number')} type="number" min="1" max="20" className={inputClass} />
+        <Field label="Número do mensalista (1-99)">
+          <input {...register('mensalista_number')} type="number" min="1" max="99" className={inputClass} />
         </Field>
         <div className="sm:col-span-2">
           <Button disabled={formState.isSubmitting}>Salvar cadastro</Button>

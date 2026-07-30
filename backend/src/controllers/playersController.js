@@ -8,6 +8,18 @@ const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} 
 // Mensalistas seguem a numeracao fixa 1-20; os demais ficam em ordem alfabetica
 const PLAYER_ORDER = `mensalista_number NULLS LAST, ${displayNameSql()}`;
 
+// A numeracao do mensalista e um inteiro de 1 a 99, sem limite de quantidade
+function parseMensalistaNumber(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || number > 99) {
+    const err = new Error('O número do mensalista deve ser um inteiro entre 1 e 99');
+    err.status = 400;
+    throw err;
+  }
+  return number;
+}
+
 async function list(req, res, next) {
   try {
     const { type, search } = req.query;
@@ -96,7 +108,7 @@ async function create(req, res, next) {
       return res.status(400).json({ error: 'Nome é obrigatório' });
     }
 
-    const number = mensalista_number ? Number(mensalista_number) : null;
+    const number = parseMensalistaNumber(mensalista_number);
     if (number) {
       await pool.query('UPDATE players SET mensalista_number = NULL WHERE mensalista_number = $1', [number]);
     }
@@ -124,9 +136,7 @@ async function update(req, res, next) {
       first_name, last_name, nickname, position, stars, photo_url,
       mensalista_number, phone, email, password,
     } = req.body;
-    const number = mensalista_number === '' || mensalista_number === null || mensalista_number === undefined
-      ? null
-      : Number(mensalista_number);
+    const number = parseMensalistaNumber(mensalista_number);
 
     if (number !== null) {
       // A numeracao 1-20 e exclusiva: libera quem estiver ocupando a vaga

@@ -15,3 +15,47 @@ body {
   background: var(--color-gulag-bg);
   color: #e5e7eb;
 }
+
+/* Menu lateral: gaveta sobre a tela no celular, fixa na lateral no desktop.
+   O CSS e a unica fonte de verdade do layout, para nao depender de media query em JS. */
+.sidebar {
+  position: fixed;
+  inset-block: 0;
+  left: 0;
+  z-index: 50;
+  width: 18rem;
+  max-width: 80%;
+  transform: translateX(-100%);
+  transition: transform 200ms ease;
+}
+
+.sidebar[data-open='true'] {
+  transform: translateX(0);
+}
+
+.sidebar-overlay,
+.sidebar-toggle {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .sidebar-overlay[data-open='true'],
+  .sidebar-toggle {
+    display: block;
+  }
+}
+
+@media (min-width: 1024px) {
+  .sidebar {
+    position: static;
+    z-index: auto;
+    width: 16rem;
+    max-width: none;
+    flex-shrink: 0;
+    transform: none;
+  }
+
+  .sidebar-close {
+    display: none;
+  }
+}

@@ -5,7 +5,7 @@ import api from '../../api/client';
 import AtaList from '../../components/AtaList';
 import TeamDraw from '../../components/TeamDraw';
 import { useAuth } from '../../context/AuthContext';
-import { inputClass, Button, Card, ScrollArea, EmptyState } from '../../components/ui';
+import { inputClass, Button, Card, ScrollArea, EmptyState, bestTeam } from '../../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
 const numberInput = 'w-14 bg-gulag-surface-2 border border-gulag-border text-gray-100 rounded px-2 py-1 text-sm text-center';
@@ -52,6 +52,8 @@ export default function AdminMatchdayDetailPage() {
   const availableDiaristas = allDiaristas.filter((p) => !inAta.has(p.id));
   // O admin tambem joga: precisa confirmar a propria presenca como qualquer mensalista
   const mine = confirmations.find((c) => c.player_id === player?.id);
+  // Considera o que esta na tela, para o destaque aparecer ja ao digitar
+  const champion = bestTeam(teams.map((t) => ({ ...t, ...teamResults[t.id] })));
 
   async function toggleConfirmation(entry) {
     const status = entry.status === 'confirmed' ? 'pending' : 'confirmed';
@@ -60,6 +62,17 @@ export default function AdminMatchdayDetailPage() {
       load();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao alterar presença');
+    }
+  }
+
+  async function removeFromAta(entry) {
+    if (!window.confirm(`Retirar ${entry.name} da lista?`)) return;
+    try {
+      await api.delete(`/matchdays/${id}/confirmations/${entry.player_id}`);
+      toast.success(`${entry.name} saiu da lista`);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao retirar da lista');
     }
   }
 
@@ -222,7 +235,9 @@ export default function AdminMatchdayDetailPage() {
       <AtaList
         confirmations={confirmations}
         onToggle={toggleConfirmation}
+        onRemove={removeFromAta}
         canEdit
+        isAdmin
         currentPlayerId={player?.id}
       />
 
@@ -266,9 +281,23 @@ export default function AdminMatchdayDetailPage() {
         teams.map((team) => {
           const results = teamResults[team.id] || {};
           const teamPlayers = linePlayers.filter((c) => playerTeamId[c.player_id] === team.id);
+          const isBest = champion?.id === team.id;
 
           return (
-            <Card key={team.id} title={team.name}>
+            <Card
+              key={team.id}
+              className={isBest ? 'border-gulag-cyan' : ''}
+              title={
+                <span className="flex items-center gap-2">
+                  {team.name}
+                  {isBest && (
+                    <span className="text-[10px] uppercase tracking-wide bg-gulag-cyan text-black rounded px-1.5 py-0.5">
+                      🏆 melhor time do dia
+                    </span>
+                  )}
+                </span>
+              }
+            >
               <div className="flex gap-2 mb-3">
                 {[['wins', 'Vitórias'], ['draws', 'Empates'], ['losses', 'Derrotas']].map(([field, label]) => (
                   <label key={field} className="flex-1 text-center">

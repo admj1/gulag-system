@@ -15,6 +15,7 @@ import AdminMatchdaysPage from './pages/admin/AdminMatchdaysPage';
 import AdminMatchdayDetailPage from './pages/admin/AdminMatchdayDetailPage';
 import AdminFinancePage from './pages/admin/AdminFinancePage';
 import AdminSettingsPage from './pages/admin/AdminSettingsPage';
+import AdminWhatsappPage from './pages/admin/AdminWhatsappPage';
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="matchdays" element={<AdminMatchdaysPage />} />
           <Route path="matchdays/:id" element={<AdminMatchdayDetailPage />} />
           <Route path="finance" element={<AdminFinancePage />} />
+          <Route path="whatsapp" element={<AdminWhatsappPage />} />
           <Route path="settings" element={<AdminSettingsPage />} />
         </Route>
       </Route>

@@ -1,18 +1,21 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 
-const tabClass = ({ isActive }) =>
-  `px-3 py-1.5 rounded text-sm whitespace-nowrap ${isActive ? 'bg-gulag-cyan text-black font-semibold' : 'text-gray-300 border border-gulag-border hover:text-gulag-cyan'}`;
+// A navegacao entre as areas do admin fica na sidebar; aqui so o titulo da secao
+const TITLES = {
+  '/admin/players': 'Jogadores',
+  '/admin/matchdays': 'Peladas',
+  '/admin/finance': 'Financeiro',
+  '/admin/whatsapp': 'Confirmação por WhatsApp',
+  '/admin/settings': 'Configurações',
+};
 
 export default function AdminLayout() {
+  const { pathname } = useLocation();
+  const title = TITLES[pathname] || (pathname.startsWith('/admin/matchdays/') ? 'Peladas' : 'Administração');
+
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-gray-100">Administração</h1>
-      <nav className="flex gap-2 overflow-x-auto pb-1">
-        <NavLink to="/admin/players" className={tabClass}>Jogadores</NavLink>
-        <NavLink to="/admin/matchdays" className={tabClass}>Peladas</NavLink>
-        <NavLink to="/admin/finance" className={tabClass}>Financeiro</NavLink>
-        <NavLink to="/admin/settings" className={tabClass}>Configurações</NavLink>
-      </nav>
+      <h1 className="text-2xl font-bold text-gray-100">{title}</h1>
       <Outlet />
     </div>
   );

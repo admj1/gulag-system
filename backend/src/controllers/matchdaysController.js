@@ -2,7 +2,6 @@ const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { displayNameSql, getSettings } = require('../config/settings');
 
-const MAX_CONFIRMED = 20;
 
 async function create(req, res, next) {
   try {
@@ -274,8 +273,34 @@ async function setConfirmation(req, res, next) {
 }
 
 // Admin remove um jogador da ata (usado para tirar diarista incluido por engano)
+// Retira alguem da lista. Alem do admin, quem convidou pode retirar
+// a pessoa que incluiu, caso ela desista.
 async function removeConfirmation(req, res, next) {
   try {
+    const { rows } = await pool.query(
+      `SELECT c.invited_by_player_id, p.player_type, m.status AS matchday_status
+       FROM confirmations c
+       JOIN players p ON p.id = c.player_id
+       JOIN matchdays m ON m.id = c.matchday_id
+       WHERE c.matchday_id = $1 AND c.player_id = $2`,
+      [req.params.id, req.params.playerId]
+    );
+    const entry = rows[0];
+    if (!entry) return res.status(404).json({ error: 'Jogador não está nesta lista' });
+
+    const isAdmin = req.user.role === 'admin';
+    if (!isAdmin) {
+      if (entry.player_type === 'mensalista') {
+        return res.status(403).json({ error: 'Mensalistas não podem ser retirados da lista' });
+      }
+      if (entry.invited_by_player_id !== req.user.id) {
+        return res.status(403).json({ error: 'Só quem convidou pode retirar esta pessoa' });
+      }
+      if (entry.matchday_status !== 'open') {
+        return res.status(409).json({ error: 'A lista desta pelada já foi fechada' });
+      }
+    }
+
     await pool.query(
       'DELETE FROM confirmations WHERE matchday_id = $1 AND player_id = $2',
       [req.params.id, req.params.playerId]
@@ -361,7 +386,7 @@ async function closeMatchday(matchdayId) {
       [matchdayId]
     );
 
-    // Goleiros nao disputam as 20 vagas; quem nao confirmou apenas sai da relacao
+    // Goleiros nao disputam as vagas de linha; quem nao confirmou apenas sai da relacao
     await client.query(
       `UPDATE confirmations c SET status = 'declined'
        FROM players p
@@ -375,7 +400,13 @@ async function closeMatchday(matchdayId) {
       [matchdayId]
     );
 
-    const vagas = Math.max(0, MAX_CONFIRMED - mensalistasConfirmados.length);
+    // Nao existe numero fixo de vagas: cada mensalista que nao confirmou libera a sua
+    const { rows: totalMensalistas } = await client.query(
+      `SELECT COUNT(*)::int AS total FROM confirmations c JOIN players p ON p.id = c.player_id
+       WHERE c.matchday_id = $1 AND p.player_type = 'mensalista'`,
+      [matchdayId]
+    );
+    const vagas = Math.max(0, totalMensalistas[0].total - mensalistasConfirmados.length);
     const { rows: diaristas } = await client.query(
       `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
        WHERE c.matchday_id = $1 AND p.player_type = 'diarista' AND c.status IN ('confirmed', 'waitlist')

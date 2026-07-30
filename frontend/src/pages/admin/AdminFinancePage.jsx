@@ -16,6 +16,7 @@ export default function AdminFinancePage() {
   const [year, setYear] = useState(now.getFullYear());
   const [monthly, setMonthly] = useState([]);
   const [pending, setPending] = useState([]);
+  const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
 
   const loadMonthly = useCallback(() => {
     api.get('/finance/monthly', { params: { month, year } }).then(({ data }) => setMonthly(data));
@@ -28,12 +29,14 @@ export default function AdminFinancePage() {
   useEffect(loadMonthly, [loadMonthly]);
   useEffect(loadPending, [loadPending]);
 
+  // A baixa usa a data informada, porque o admin pode registrar dias depois
   async function toggleMonthly(row) {
     try {
+      const paid = row.status !== 'paid';
       await api.post('/finance/monthly', {
         player_id: row.player_id,
-        month, year,
-        paid: row.status !== 'paid',
+        month, year, paid,
+        paid_at: paid ? new Date(`${paidAt}T12:00:00`).toISOString() : null,
       });
       loadMonthly();
     } catch (err) {
@@ -43,8 +46,13 @@ export default function AdminFinancePage() {
 
   async function togglePending(item) {
     try {
-      const action = item.status === 'paid' ? 'unpay' : 'pay';
-      await api.patch(`/finance/${item.id}/${action}`);
+      if (item.status === 'paid') {
+        await api.patch(`/finance/${item.id}/unpay`);
+      } else {
+        await api.patch(`/finance/${item.id}/pay`, {
+          paid_at: new Date(`${paidAt}T12:00:00`).toISOString(),
+        });
+      }
       loadPending();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao atualizar cobrança');
@@ -55,6 +63,20 @@ export default function AdminFinancePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <Card title="Data do pagamento">
+        <Field label="As baixas abaixo serão registradas com esta data">
+          <input
+            type="date"
+            value={paidAt}
+            onChange={(e) => setPaidAt(e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+        <p className="text-xs text-gray-500 mt-2">
+          Ajuste antes de marcar como pago se o pagamento foi feito em outro dia.
+        </p>
+      </Card>
+
       <Card title="Mensalidades">
         <div className="grid gap-3 sm:grid-cols-2 mb-4">
           <Field label="Mês">
@@ -124,8 +146,13 @@ export default function AdminFinancePage() {
                         {i + 1} - {item.name} <span className="text-gray-500">({TYPE_LABELS[item.type]})</span>
                       </span>
                       <span className="flex items-center gap-2 shrink-0">
-                        <span className={`text-xs ${item.status === 'paid' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        <span className={`text-xs text-right ${item.status === 'paid' ? 'text-emerald-400' : 'text-amber-400'}`}>
                           R$ {Number(item.amount).toFixed(2)}
+                          {item.status === 'paid' && item.paid_at && (
+                            <span className="block text-[10px]">
+                              pago em {new Date(item.paid_at).toLocaleDateString('pt-BR')}
+                            </span>
+                          )}
                         </span>
                         <Button
                           variant={item.status === 'paid' ? 'secondary' : 'primary'}

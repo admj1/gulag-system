@@ -17,7 +17,8 @@ router.post('/:id/confirmations', controller.confirm);
 router.post('/:id/invites', controller.invitePlayer);
 router.delete('/:id/confirmations/me', controller.cancelOwnConfirmation);
 router.patch('/:id/confirmations/:playerId', requireAdmin, controller.setConfirmation);
-router.delete('/:id/confirmations/:playerId', requireAdmin, controller.removeConfirmation);
+// Autorizacao no controller: admin sempre, ou quem convidou a pessoa
+router.delete('/:id/confirmations/:playerId', controller.removeConfirmation);
 router.post('/:id/close', requireAdmin, controller.closeList);
 router.post('/:id/draw-teams', requireAdmin, controller.drawTeams);
 router.get('/:id/teams', controller.getTeams);

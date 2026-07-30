@@ -111,11 +111,13 @@ async function historyByPlayer(req, res, next) {
   }
 }
 
+// paid_at aceita uma data informada pelo admin, que pode dar baixa dias depois
 async function markPaid(req, res, next) {
   try {
     const { rows } = await pool.query(
-      `UPDATE payments SET status = 'paid', paid_at = now() WHERE id = $1 RETURNING *`,
-      [req.params.id]
+      `UPDATE payments SET status = 'paid', paid_at = COALESCE($2::timestamptz, now())
+       WHERE id = $1 RETURNING *`,
+      [req.params.id, req.body?.paid_at || null]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Cobrança não encontrada' });
     res.json(rows[0]);

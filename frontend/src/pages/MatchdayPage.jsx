@@ -5,7 +5,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import AtaList from '../components/AtaList';
 import InvitePlayer from '../components/InvitePlayer';
-import { Button, Card, ScrollArea } from '../components/ui';
+import { Button, Card, ScrollArea, bestTeam } from '../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
 
@@ -38,6 +38,17 @@ export default function MatchdayPage() {
     }
   }
 
+  async function removeFromAta(entry) {
+    if (!window.confirm(`Retirar ${entry.name} da lista?`)) return;
+    try {
+      await api.delete(`/matchdays/${id}/confirmations/${entry.player_id}`);
+      toast.success(`${entry.name} saiu da lista`);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao retirar da lista');
+    }
+  }
+
   async function cancelPresence() {
     try {
       await api.delete(`/matchdays/${id}/confirmations/me`);
@@ -54,6 +65,7 @@ export default function MatchdayPage() {
   const nameById = Object.fromEntries(confirmations.map((c) => [c.player_id, c.name]));
   const inAta = new Set(confirmations.map((c) => c.player_id));
   const candidates = allPlayers.filter((p) => p.player_type !== 'mensalista' && !inAta.has(p.id));
+  const champion = bestTeam(teams);
 
   return (
     <div className="flex flex-col gap-4">
@@ -87,7 +99,12 @@ export default function MatchdayPage() {
         )}
       </Card>
 
-      <AtaList confirmations={confirmations} currentPlayerId={player?.id} />
+      <AtaList
+        confirmations={confirmations}
+        currentPlayerId={player?.id}
+        isAdmin={player?.role === 'admin'}
+        onRemove={matchday.status === 'open' ? removeFromAta : undefined}
+      />
 
       {matchday.status === 'open' && (
         <InvitePlayer matchdayId={id} candidates={candidates} onInvited={load} />
@@ -95,10 +112,21 @@ export default function MatchdayPage() {
 
       {teams.map((team) => {
         const stats = summary.playerStats.filter((s) => s.team_id === team.id);
+        const isBest = champion?.id === team.id;
         return (
           <Card
             key={team.id}
-            title={team.name}
+            className={isBest ? 'border-gulag-cyan' : ''}
+            title={
+              <span className="flex items-center gap-2">
+                {team.name}
+                {isBest && (
+                  <span className="text-[10px] uppercase tracking-wide bg-gulag-cyan text-black rounded px-1.5 py-0.5">
+                    🏆 melhor time do dia
+                  </span>
+                )}
+              </span>
+            }
             action={
               <span className="text-xs text-gray-400">
                 {team.wins}V · {team.draws}E · {team.losses}D

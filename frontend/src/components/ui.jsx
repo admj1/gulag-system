@@ -65,3 +65,18 @@ export function Avatar({ src, name, size = 'md' }) {
 export function EmptyState({ children }) {
   return <p className="text-sm text-gray-500 py-4 text-center">{children}</p>;
 }
+
+// Melhor time do dia: mais vitorias e, no empate, menos derrotas.
+// Retorna null se ninguem pontuou ou se houver empate total na lideranca.
+export function bestTeam(teams) {
+  const n = (value) => Number(value) || 0;
+  const played = teams
+    .map((t) => ({ ...t, wins: n(t.wins), draws: n(t.draws), losses: n(t.losses) }))
+    .filter((t) => t.wins + t.draws + t.losses > 0);
+  if (played.length === 0) return null;
+
+  const ranked = played.sort((a, b) => b.wins - a.wins || a.losses - b.losses);
+  const [first, second] = ranked;
+  if (second && first.wins === second.wins && first.losses === second.losses) return null;
+  return first;
+}
