@@ -110,6 +110,32 @@ export default function MatchdayPage() {
         <InvitePlayer matchdayId={id} candidates={candidates} onInvited={load} />
       )}
 
+      {/* Goleiros aparecem sempre antes dos times */}
+      {summary.goalkeeperStats.length > 0 && (
+        <Card title="Goleiros">
+          <ScrollArea>
+            <table className="w-full text-sm min-w-[420px]">
+              <thead className="text-gray-400 text-left">
+                <tr><th>Nome</th><th>V</th><th>D</th><th>E</th><th>Gols</th><th>Ass.</th><th>Pên. def.</th></tr>
+              </thead>
+              <tbody>
+                {summary.goalkeeperStats.map((s) => (
+                  <tr key={s.id} className="text-gray-200 border-t border-gulag-border">
+                    <td className="py-1">{nameById[s.player_id] || `#${s.player_id}`}</td>
+                    <td>{s.wins}</td>
+                    <td>{s.losses}</td>
+                    <td>{s.draws}</td>
+                    <td>{s.goals}</td>
+                    <td>{s.assists}</td>
+                    <td>{s.penalties_saved}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollArea>
+        </Card>
+      )}
+
       {teams.map((team) => {
         const stats = summary.playerStats.filter((s) => s.team_id === team.id);
         const isBest = champion?.id === team.id;
@@ -160,31 +186,6 @@ export default function MatchdayPage() {
           </Card>
         );
       })}
-
-      {summary.goalkeeperStats.length > 0 && (
-        <Card title="Goleiros">
-          <ScrollArea>
-            <table className="w-full text-sm min-w-[420px]">
-              <thead className="text-gray-400 text-left">
-                <tr><th>Nome</th><th>V</th><th>D</th><th>E</th><th>Gols</th><th>Ass.</th><th>Pên. def.</th></tr>
-              </thead>
-              <tbody>
-                {summary.goalkeeperStats.map((s) => (
-                  <tr key={s.id} className="text-gray-200 border-t border-gulag-border">
-                    <td className="py-1">{nameById[s.player_id] || `#${s.player_id}`}</td>
-                    <td>{s.wins}</td>
-                    <td>{s.losses}</td>
-                    <td>{s.draws}</td>
-                    <td>{s.goals}</td>
-                    <td>{s.assists}</td>
-                    <td>{s.penalties_saved}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ScrollArea>
-        </Card>
-      )}
     </div>
   );
 }

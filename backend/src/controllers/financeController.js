@@ -17,7 +17,7 @@ async function monthlyOverview(req, res, next) {
        LEFT JOIN payments pay
          ON pay.player_id = p.id AND pay.type = 'mensalidade'
         AND pay.reference_month = $1 AND pay.reference_year = $2
-       WHERE p.player_type = 'mensalista'
+       WHERE p.player_type = 'mensalista' AND p.active
        ORDER BY ${displayNameSql('p')}`,
       [month, year]
     );

@@ -23,7 +23,7 @@ async function rosterPreview(req, res, next) {
     const { rows } = await pool.query(
       `SELECT id, ${displayNameSql()} AS name, player_type, stars, mensalista_number
        FROM players
-       WHERE player_type IN ('mensalista', 'goleiro') AND NOT blocked
+       WHERE player_type IN ('mensalista', 'goleiro') AND active AND NOT blocked
        ORDER BY player_type, mensalista_number NULLS LAST, ${displayNameSql()}`
     );
     res.json(rows);
@@ -75,7 +75,7 @@ async function createFromRoster(req, res, next) {
     await client.query(
       `INSERT INTO confirmations (matchday_id, player_id, status)
        SELECT $1, id, $2 FROM players
-       WHERE player_type IN ('mensalista', 'goleiro') AND NOT blocked
+       WHERE player_type IN ('mensalista', 'goleiro') AND active AND NOT blocked
        ON CONFLICT (matchday_id, player_id) DO NOTHING`,
       [matchday.id, confirm_all ? 'confirmed' : 'pending']
     );
@@ -204,9 +204,10 @@ async function invitePlayer(req, res, next) {
       invitedId = rows[0].id;
     } else {
       const { rows } = await client.query(
-        'SELECT player_type, blocked, block_reason FROM players WHERE id = $1', [invitedId]
+        'SELECT player_type, blocked, block_reason, active FROM players WHERE id = $1', [invitedId]
       );
       if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
+      if (!rows[0].active) return res.status(409).json({ error: 'Este cadastro está inativo' });
       if (rows[0].blocked) {
         return res.status(403).json({ error: rows[0].block_reason || 'Jogador bloqueado' });
       }

@@ -16,7 +16,11 @@ router.post('/me/photo', upload.single('photo'), (req, res) => {
 router.get('/:id', controller.getById);
 router.post('/', requireAdmin, controller.create);
 router.put('/:id', requireAdmin, controller.update);
+router.delete('/:id', requireAdmin, controller.remove);
 router.patch('/:id/block', requireAdmin, controller.setBlock);
 router.patch('/:id/status', requireAdmin, controller.changeStatus);
+router.patch('/:id/active', requireAdmin, controller.setActive);
+// Autorizacao no controller: somente o dono do sistema
+router.patch('/:id/role', requireAdmin, controller.setRole);
 
 module.exports = router;

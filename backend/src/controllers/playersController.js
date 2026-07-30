@@ -3,9 +3,10 @@ const pool = require('../config/db');
 const { displayNameSql } = require('../config/settings');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
-  phone, email, photo_url, position, stars, role, player_type, blocked, mensalista_number`;
+  phone, email, photo_url, position, stars, role, player_type, blocked, mensalista_number,
+  active, is_owner`;
 
-// Mensalistas seguem a numeracao fixa 1-20; os demais ficam em ordem alfabetica
+// Mensalistas seguem a propria numeracao; os demais ficam em ordem alfabetica
 const PLAYER_ORDER = `mensalista_number NULLS LAST, ${displayNameSql()}`;
 
 // A numeracao do mensalista e um inteiro de 1 a 99, sem limite de quantidade
@@ -22,10 +23,14 @@ function parseMensalistaNumber(value) {
 
 async function list(req, res, next) {
   try {
-    const { type, search } = req.query;
+    const { type, search, includeInactive } = req.query;
     const conditions = [];
     const params = [];
 
+    // Inativos ficam fora das listas, mas o admin pode pedir para ver
+    if (!(includeInactive === 'true' && req.user.role === 'admin')) {
+      conditions.push('active');
+    }
     if (type) {
       params.push(type);
       conditions.push(`player_type = $${params.length}`);
@@ -138,6 +143,18 @@ async function update(req, res, next) {
     } = req.body;
     const number = parseMensalistaNumber(mensalista_number);
 
+    // Numero e exclusivo de mensalista, para nao ocupar vaga de quem e da lista fixa
+    if (number !== null) {
+      const { rows: target } = await pool.query(
+        'SELECT player_type FROM players WHERE id = $1', [req.params.id]
+      );
+      if (target[0] && target[0].player_type !== 'mensalista') {
+        return res.status(409).json({
+          error: 'Só mensalista tem número. Use "Tornar Mensalista" para atribuir automaticamente.',
+        });
+      }
+    }
+
     if (number !== null) {
       // A numeracao 1-20 e exclusiva: libera quem estiver ocupando a vaga
       await pool.query(
@@ -196,39 +213,157 @@ async function setBlock(req, res, next) {
   }
 }
 
-// Admin: promove a mensalista ou rebaixa a diarista, com data de início/fim registrada no histórico
+// Menor numero livre entre 1 e 99, para quem vira mensalista entrar na primeira vaga
+async function firstFreeNumber(client) {
+  const { rows } = await client.query(
+    `SELECT n FROM generate_series(1, 99) AS n
+     WHERE n NOT IN (SELECT mensalista_number FROM players WHERE mensalista_number IS NOT NULL)
+     ORDER BY n LIMIT 1`
+  );
+  return rows[0]?.n || null;
+}
+
+// Admin: troca o tipo do jogador com efeito imediato.
+// A data entra automaticamente no histórico (usada para saber de quando cobrar mensalidade).
 async function changeStatus(req, res, next) {
+  const client = await pool.connect();
   try {
     const { player_type, start_date } = req.body;
     if (!['mensalista', 'diarista', 'goleiro'].includes(player_type)) {
       return res.status(400).json({ error: 'player_type inválido' });
     }
+    const date = start_date || new Date().toISOString().slice(0, 10);
 
-    await pool.query(
+    await client.query('BEGIN');
+
+    await client.query(
       `UPDATE player_status_history SET end_date = $1
        WHERE player_id = $2 AND end_date IS NULL`,
-      [start_date, req.params.id]
+      [date, req.params.id]
     );
-
-    await pool.query(
+    await client.query(
       `INSERT INTO player_status_history (player_id, player_type, start_date)
        VALUES ($1, $2, $3)`,
-      [req.params.id, player_type, start_date]
+      [req.params.id, player_type, date]
     );
 
-    // Quem deixa de ser mensalista libera a vaga numerada
+    // Ao virar mensalista ocupa a primeira vaga livre; ao sair, libera a sua
+    let number = null;
+    if (player_type === 'mensalista') {
+      const { rows: current } = await client.query(
+        'SELECT mensalista_number FROM players WHERE id = $1',
+        [req.params.id]
+      );
+      number = current[0]?.mensalista_number || await firstFreeNumber(client);
+    }
+
+    const { rows } = await client.query(
+      `UPDATE players SET player_type = $1, mensalista_number = $2
+       WHERE id = $3
+       RETURNING id, ${displayNameSql()} AS name, player_type, mensalista_number`,
+      [player_type, number, req.params.id]
+    );
+    if (!rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Jogador não encontrado' });
+    }
+
+    await client.query('COMMIT');
+    res.json(rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
+// Admin: inativa um cadastro (sai das listas, mantem o historico) ou reativa
+async function setActive(req, res, next) {
+  try {
+    const active = req.body.active !== false;
     const { rows } = await pool.query(
       `UPDATE players SET
-         player_type = $1,
-         mensalista_number = CASE WHEN $1 = 'mensalista' THEN mensalista_number ELSE NULL END
-       WHERE id = $2
-       RETURNING id, ${displayNameSql()} AS name, player_type, mensalista_number`,
-      [player_type, req.params.id]
+         active = $1,
+         mensalista_number = CASE WHEN $1 THEN mensalista_number ELSE NULL END
+       WHERE id = $2 AND NOT is_owner
+       RETURNING id, ${displayNameSql()} AS name, active, mensalista_number`,
+      [active, req.params.id]
     );
+    if (!rows[0]) {
+      return res.status(404).json({ error: 'Jogador não encontrado ou é o dono do sistema' });
+    }
     res.json(rows[0]);
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { list, getById, getMe, updateMe, create, update, setBlock, changeStatus };
+// Admin: exclui de vez, so quando o cadastro nao tem nada lancado
+async function remove(req, res, next) {
+  try {
+    const { rows: owner } = await pool.query(
+      'SELECT is_owner FROM players WHERE id = $1', [req.params.id]
+    );
+    if (!owner[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
+    if (owner[0].is_owner) {
+      return res.status(403).json({ error: 'O dono do sistema não pode ser excluído' });
+    }
+
+    const { rows: usage } = await pool.query(
+      `SELECT
+         (SELECT COUNT(*) FROM confirmations WHERE player_id = $1)::int AS confirmacoes,
+         (SELECT COUNT(*) FROM player_match_stats WHERE player_id = $1)::int AS sumulas,
+         (SELECT COUNT(*) FROM goalkeeper_match_stats WHERE player_id = $1)::int AS sumulas_goleiro,
+         (SELECT COUNT(*) FROM payments WHERE player_id = $1)::int AS cobrancas`,
+      [req.params.id]
+    );
+    const total = Object.values(usage[0]).reduce((sum, n) => sum + n, 0);
+    if (total > 0) {
+      return res.status(409).json({
+        error: 'Este jogador já tem histórico no sistema. Inative o cadastro em vez de excluir.',
+        usage: usage[0],
+      });
+    }
+
+    await pool.query('DELETE FROM player_status_history WHERE player_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM players WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Somente o dono do sistema promove ou rebaixa administradores
+async function setRole(req, res, next) {
+  try {
+    // Confere no banco, para o token nao poder afirmar que e dono
+    const { rows: requester } = await pool.query(
+      'SELECT is_owner FROM players WHERE id = $1', [req.user.id]
+    );
+    if (!requester[0]?.is_owner) {
+      return res.status(403).json({ error: 'Apenas o dono do sistema pode alterar administradores' });
+    }
+    const { role } = req.body;
+    if (!['admin', 'player'].includes(role)) {
+      return res.status(400).json({ error: 'Perfil inválido' });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE players SET role = $1 WHERE id = $2 AND NOT is_owner
+       RETURNING id, ${displayNameSql()} AS name, role`,
+      [role, req.params.id]
+    );
+    if (!rows[0]) {
+      return res.status(404).json({ error: 'Jogador não encontrado ou é o dono do sistema' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  list, getById, getMe, updateMe, create, update, setBlock, changeStatus,
+  setActive, remove, setRole,
+};

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
 import Modal from '../../components/Modal';
+import { useAuth } from '../../context/AuthContext';
 import { inputClass, Button, Card, Field, Avatar, EmptyState } from '../../components/ui';
 
 const GROUPS = [
@@ -15,16 +16,20 @@ const GROUPS = [
 export const isIncomplete = (player) => !player.phone;
 
 export default function AdminPlayersPage() {
+  const { player: me } = useAuth();
+  const isOwner = !!me?.is_owner;
   const [players, setPlayers] = useState([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [onlyIncomplete, setOnlyIncomplete] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
 
-  function load() {
-    api.get('/players').then(({ data }) => setPlayers(data));
-  }
+  const load = useCallback(() => {
+    api.get('/players', { params: { includeInactive: showInactive } })
+      .then(({ data }) => setPlayers(data));
+  }, [showInactive]);
 
-  useEffect(load, []);
+  useEffect(() => { load(); }, [load]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -47,6 +52,16 @@ export default function AdminPlayersPage() {
         />
         <Button onClick={() => setShowForm(true)}>+ Cadastrar jogador</Button>
       </div>
+
+      <label className="flex items-center gap-2 text-sm text-gray-400">
+        <input
+          type="checkbox"
+          checked={showInactive}
+          onChange={(e) => setShowInactive(e.target.checked)}
+          className="w-4 h-4"
+        />
+        Mostrar cadastros inativos
+      </label>
 
       {incompleteCount > 0 && (
         <Card className="border-amber-700/60">
@@ -77,7 +92,9 @@ export default function AdminPlayersPage() {
               <EmptyState>Nenhum jogador.</EmptyState>
             ) : (
               <div className="flex flex-col gap-2">
-                {group.map((p) => <PlayerRow key={p.id} player={p} onChange={load} />)}
+                {group.map((p) => (
+                  <PlayerRow key={p.id} player={p} onChange={load} isOwner={isOwner} />
+                ))}
               </div>
             )}
           </Card>
@@ -146,7 +163,7 @@ function NewPlayerModal({ onClose, onCreated }) {
   );
 }
 
-function PlayerRow({ player, onChange }) {
+function PlayerRow({ player, onChange, isOwner }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -160,23 +177,28 @@ function PlayerRow({ player, onChange }) {
         )}
         <Avatar src={player.photo_url} name={player.name} size="sm" />
         <div className="min-w-0 flex-1">
-          <p className="text-gray-100 truncate">{player.name}</p>
+          <p className={`truncate ${player.active ? 'text-gray-100' : 'text-gray-500 line-through'}`}>
+            {player.name}
+            {player.is_owner && <span className="text-gulag-cyan text-xs ml-1">(dono)</span>}
+            {!player.is_owner && player.role === 'admin' && (
+              <span className="text-gulag-cyan text-xs ml-1">(admin)</span>
+            )}
+          </p>
           <p className="text-xs text-gray-500">
             {player.stars}★
+            {!player.active ? ' · inativo' : ''}
             {player.blocked ? ' · bloqueado' : ''}
             {isIncomplete(player) && <span className="text-amber-400"> · sem telefone</span>}
           </p>
         </div>
         <span className="text-gulag-cyan text-sm">{open ? 'fechar' : 'editar'}</span>
       </button>
-      {open && <PlayerEditor player={player} onChange={onChange} />}
+      {open && <PlayerEditor player={player} onChange={onChange} isOwner={isOwner} />}
     </div>
   );
 }
 
-function PlayerEditor({ player, onChange }) {
-  const [statusType, setStatusType] = useState(player.player_type);
-  const [statusDate, setStatusDate] = useState(new Date().toISOString().slice(0, 10));
+function PlayerEditor({ player, onChange, isOwner }) {
   const { register, handleSubmit, formState } = useForm({
     defaultValues: {
       first_name: player.first_name || '',
@@ -207,13 +229,54 @@ function PlayerEditor({ player, onChange }) {
     }
   }
 
-  async function applyStatusChange() {
+  // Efeito imediato: virar mensalista ocupa a primeira vaga livre da numeracao
+  async function changeType(player_type) {
     try {
-      await api.patch(`/players/${player.id}/status`, { player_type: statusType, start_date: statusDate });
-      toast.success('Status atualizado');
+      const { data } = await api.patch(`/players/${player.id}/status`, { player_type });
+      toast.success(
+        data.mensalista_number
+          ? `Agora é mensalista nº ${data.mensalista_number}`
+          : `Agora é ${player_type}`
+      );
       onChange();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao atualizar status');
+      toast.error(err.response?.data?.error || 'Erro ao atualizar tipo');
+    }
+  }
+
+  async function toggleActive() {
+    const reactivating = !player.active;
+    if (!reactivating && !window.confirm(`Inativar o cadastro de ${player.name}?`)) return;
+    try {
+      await api.patch(`/players/${player.id}/active`, { active: reactivating });
+      toast.success(reactivating ? 'Cadastro reativado' : 'Cadastro inativado');
+      onChange();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao alterar situação');
+    }
+  }
+
+  async function removePlayer() {
+    if (!window.confirm(`Excluir definitivamente ${player.name}? Isso não pode ser desfeito.`)) return;
+    try {
+      await api.delete(`/players/${player.id}`);
+      toast.success('Cadastro excluído');
+      onChange();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao excluir cadastro');
+    }
+  }
+
+  async function toggleAdmin() {
+    const role = player.role === 'admin' ? 'player' : 'admin';
+    const acao = role === 'admin' ? 'promover a administrador' : 'remover o acesso de administrador de';
+    if (!window.confirm(`Deseja ${acao} ${player.name}?`)) return;
+    try {
+      await api.patch(`/players/${player.id}/role`, { role });
+      toast.success(role === 'admin' ? 'Agora é administrador' : 'Acesso de administrador removido');
+      onChange();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao alterar perfil');
     }
   }
 
@@ -275,26 +338,57 @@ function PlayerEditor({ player, onChange }) {
         </div>
       </form>
 
-      <Field label="Tipo / a partir de">
+      <div className="sm:col-span-2 border-t border-gulag-border pt-3">
+        <p className="text-sm text-gray-400 mb-2">
+          Tipo atual: <span className="text-gray-100">{player.player_type}</span>
+          {player.mensalista_number && <span className="text-gray-500"> · nº {player.mensalista_number}</span>}
+        </p>
         <div className="flex gap-2 flex-wrap">
-          <select value={statusType} onChange={(e) => setStatusType(e.target.value)} className={`${inputClass} flex-1`}>
-            <option value="mensalista">Mensalista</option>
-            <option value="diarista">Diarista</option>
-            <option value="goleiro">Goleiro</option>
-          </select>
-          <input type="date" value={statusDate} onChange={(e) => setStatusDate(e.target.value)} className={`${inputClass} flex-1`} />
-          <Button variant="secondary" onClick={applyStatusChange}>Aplicar</Button>
+          {player.player_type === 'mensalista' ? (
+            <Button variant="secondary" onClick={() => changeType('diarista')}>
+              Tornar Diarista
+            </Button>
+          ) : (
+            <Button onClick={() => changeType('mensalista')}>
+              Tornar Mensalista
+            </Button>
+          )}
+          {player.player_type !== 'goleiro' && (
+            <Button variant="secondary" onClick={() => changeType('goleiro')}>
+              Tornar Goleiro
+            </Button>
+          )}
         </div>
-      </Field>
+      </div>
 
-      <div className="sm:col-span-2">
+      <div className="sm:col-span-2 border-t border-gulag-border pt-3 flex gap-2 flex-wrap">
         <Button variant={player.blocked ? 'secondary' : 'danger'} onClick={toggleBlock}>
           {player.blocked ? 'Desbloquear cadastro' : 'Bloquear cadastro'}
         </Button>
-        {player.blocked && player.block_reason && (
-          <p className="text-xs text-red-300 mt-1">Motivo: {player.block_reason}</p>
+
+        {!player.is_owner && (
+          <>
+            <Button variant="secondary" onClick={toggleActive}>
+              {player.active ? 'Inativar cadastro' : 'Reativar cadastro'}
+            </Button>
+            <Button variant="danger" onClick={removePlayer}>Excluir cadastro</Button>
+          </>
+        )}
+
+        {isOwner && !player.is_owner && (
+          <Button variant="secondary" onClick={toggleAdmin}>
+            {player.role === 'admin' ? 'Remover admin' : 'Promover a admin'}
+          </Button>
         )}
       </div>
+
+      {player.blocked && player.block_reason && (
+        <p className="sm:col-span-2 text-xs text-red-300">Motivo do bloqueio: {player.block_reason}</p>
+      )}
+      <p className="sm:col-span-2 text-xs text-gray-500">
+        Inativar tira o jogador das listas e mantém o histórico. Excluir só é possível
+        para cadastros sem nenhum lançamento.
+      </p>
     </div>
   );
 }

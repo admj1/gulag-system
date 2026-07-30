@@ -4,7 +4,7 @@ const pool = require('../config/db');
 const { displayNameSql } = require('../config/settings');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
-  phone, email, photo_url, position, stars, role, player_type`;
+  phone, email, photo_url, position, stars, role, player_type, is_owner, active`;
 
 function signToken(player) {
   return jwt.sign(
@@ -54,6 +54,9 @@ async function login(req, res, next) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
+    if (!player.active) {
+      return res.status(403).json({ error: 'Cadastro inativo. Procure o organizador.' });
+    }
     if (player.blocked) {
       return res.status(403).json({ error: player.block_reason || 'Cadastro bloqueado' });
     }

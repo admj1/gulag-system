@@ -5,13 +5,13 @@ import { Avatar } from './ui';
 
 const LINKS = [
   { to: '/', label: 'Peladas', icon: '⚽', end: true },
-  { to: '/players', label: 'Jogadores', icon: '👥' },
   { to: '/rankings', label: 'Rankings', icon: '🏆' },
+  { to: '/players', label: 'Jogadores', icon: '👥' },
   { to: '/perfil', label: 'Meu perfil', icon: '🙋' },
 ];
 
 const ADMIN_LINKS = [
-  { to: '/admin/players', label: 'Jogadores', icon: '📋' },
+  { to: '/admin/players', label: 'Cadastro de Jogadores', icon: '📋' },
   { to: '/admin/matchdays', label: 'Peladas', icon: '📅' },
   { to: '/admin/finance', label: 'Financeiro', icon: '💰' },
   { to: '/admin/whatsapp', label: 'WhatsApp', icon: '💬' },
@@ -22,6 +22,8 @@ export default function Layout() {
   const { player, isAdmin, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  // Comeca aberto se o usuario ja esta numa tela de administracao
+  const [adminOpen, setAdminOpen] = useState(() => location.pathname.startsWith('/admin'));
 
   // Ao navegar, fecha a gaveta (no celular ela cobre a tela)
   useEffect(() => setOpen(false), [location.pathname]);
@@ -83,12 +85,17 @@ export default function Layout() {
           <SidebarGroup links={LINKS} />
 
           {isAdmin && (
-            <>
-              <p className="px-4 pt-4 pb-1 text-[11px] uppercase tracking-wide text-gray-500">
+            <div className="mt-3 pt-2 border-t border-gulag-border">
+              <button
+                onClick={() => setAdminOpen((v) => !v)}
+                aria-expanded={adminOpen}
+                className="w-full flex items-center gap-2 px-4 py-2 text-[11px] uppercase tracking-wide text-gray-400 hover:text-gulag-cyan"
+              >
+                <span aria-hidden="true" className="text-xs">{adminOpen ? '▾' : '▸'}</span>
                 Administração
-              </p>
-              <SidebarGroup links={ADMIN_LINKS} />
-            </>
+              </button>
+              {adminOpen && <SidebarGroup links={ADMIN_LINKS} />}
+            </div>
           )}
         </div>
 

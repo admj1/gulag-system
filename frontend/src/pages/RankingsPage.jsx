@@ -60,13 +60,13 @@ export default function RankingsPage() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <RankingList title="Artilheiros" items={rankings.topScorers} render={(i) => `${i.goals} gols`} />
-        <RankingList title="Garçons" items={rankings.topAssists} render={(i) => `${i.assists} assist.`} />
         <RankingList
           title="Goleiros"
           items={rankings.topGoalkeepers}
           render={(i) => `${i.wins}V · ${i.penalties_saved} pên.`}
         />
+        <RankingList title="Artilheiros" items={rankings.topScorers} render={(i) => `${i.goals} gols`} />
+        <RankingList title="Garçons" items={rankings.topAssists} render={(i) => `${i.assists} assist.`} />
       </div>
     </div>
   );

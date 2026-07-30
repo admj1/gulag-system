@@ -34,18 +34,7 @@ export default function PlayerProfilePage() {
         </div>
       </div>
 
-      <Card title="Estatísticas de linha">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <Stat label="Peladas jogadas" value={totals.peladas_jogadas} />
-          <Stat label="Gols" value={totals.goals} />
-          <Stat label="Assistências" value={totals.assists} />
-          <Stat label="Amarelos" value={totals.yellow_cards} />
-          <Stat label="Azuis" value={totals.blue_cards} />
-          <Stat label="Vermelhos" value={totals.red_cards} />
-          <Stat label="Ausências" value={totals.absences} />
-        </div>
-      </Card>
-
+      {/* Para goleiro, as estatisticas de goleiro vem sempre primeiro */}
       {player.player_type === 'goleiro' && (
         <Card title="Estatísticas de goleiro">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -60,6 +49,18 @@ export default function PlayerProfilePage() {
           </div>
         </Card>
       )}
+
+      <Card title="Estatísticas de linha">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Stat label="Peladas jogadas" value={totals.peladas_jogadas} />
+          <Stat label="Gols" value={totals.goals} />
+          <Stat label="Assistências" value={totals.assists} />
+          <Stat label="Amarelos" value={totals.yellow_cards} />
+          <Stat label="Azuis" value={totals.blue_cards} />
+          <Stat label="Vermelhos" value={totals.red_cards} />
+          <Stat label="Ausências" value={totals.absences} />
+        </div>
+      </Card>
     </div>
   );
 }

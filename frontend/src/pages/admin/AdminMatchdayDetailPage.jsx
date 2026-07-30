@@ -275,6 +275,41 @@ export default function AdminMatchdayDetailPage() {
 
       <h2 className="text-lg font-semibold text-gray-100 mt-2">Súmula</h2>
 
+      {/* Goleiros aparecem sempre antes dos times */}
+      {goalkeepers.length > 0 && (
+        <Card title="Goleiros">
+          <ScrollArea>
+            <table className="w-full text-sm min-w-[620px]">
+              <thead className="text-gray-400 text-left">
+                <tr>
+                  <th className="pb-2">Nome</th><th>Vit.</th><th>Der.</th><th>Emp.</th>
+                  <th>Gols</th><th>Ass.</th><th>Pên. def.</th><th>Amarelo</th><th>Vermelho</th>
+                </tr>
+              </thead>
+              <tbody>
+                {goalkeepers.map((c) => {
+                  const s = goalkeeperStats[c.player_id] || {};
+                  return (
+                    <tr key={c.player_id} className="text-gray-200 border-t border-gulag-border">
+                      <td className="py-1 pr-2 whitespace-nowrap">{c.name}</td>
+                      {['wins', 'losses', 'draws', 'goals', 'assists', 'penalties_saved', 'yellow_cards', 'red_cards'].map((field) => (
+                        <td key={field} className="py-1">
+                          <input
+                            type="number" min="0" inputMode="numeric" className={numberInput}
+                            value={s[field] ?? ''}
+                            onChange={(e) => setGoalkeeperField(c.player_id, field, e.target.value)}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </ScrollArea>
+        </Card>
+      )}
+
       {teams.length === 0 ? (
         <Card><EmptyState>Sorteie os times para lançar a súmula.</EmptyState></Card>
       ) : (
@@ -352,40 +387,6 @@ export default function AdminMatchdayDetailPage() {
             </Card>
           );
         })
-      )}
-
-      {goalkeepers.length > 0 && (
-        <Card title="Goleiros">
-          <ScrollArea>
-            <table className="w-full text-sm min-w-[620px]">
-              <thead className="text-gray-400 text-left">
-                <tr>
-                  <th className="pb-2">Nome</th><th>Vit.</th><th>Der.</th><th>Emp.</th>
-                  <th>Gols</th><th>Ass.</th><th>Pên. def.</th><th>Amarelo</th><th>Vermelho</th>
-                </tr>
-              </thead>
-              <tbody>
-                {goalkeepers.map((c) => {
-                  const s = goalkeeperStats[c.player_id] || {};
-                  return (
-                    <tr key={c.player_id} className="text-gray-200 border-t border-gulag-border">
-                      <td className="py-1 pr-2 whitespace-nowrap">{c.name}</td>
-                      {['wins', 'losses', 'draws', 'goals', 'assists', 'penalties_saved', 'yellow_cards', 'red_cards'].map((field) => (
-                        <td key={field} className="py-1">
-                          <input
-                            type="number" min="0" inputMode="numeric" className={numberInput}
-                            value={s[field] ?? ''}
-                            onChange={(e) => setGoalkeeperField(c.player_id, field, e.target.value)}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </ScrollArea>
-        </Card>
       )}
 
       {teams.length > 0 && (

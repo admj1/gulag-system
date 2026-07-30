@@ -17,7 +17,8 @@ async function findPlayerByPhone(client, phone) {
   const { rows } = await client.query(
     `SELECT id, ${displayNameSql()} AS name, player_type, blocked, block_reason
      FROM players
-     WHERE right(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 8) = $1
+     WHERE active
+       AND right(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 8) = $1
        AND length(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g')) >= 8
      ORDER BY id
      LIMIT 2`,
