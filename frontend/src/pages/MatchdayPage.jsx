@@ -38,6 +38,16 @@ export default function MatchdayPage() {
     }
   }
 
+  async function declinePresence() {
+    try {
+      await api.post(`/matchdays/${id}/decline`);
+      toast.success('Avisado que você não vai');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao avisar ausência');
+    }
+  }
+
   async function removeFromAta(entry) {
     if (!window.confirm(`Retirar ${entry.name} da lista?`)) return;
     try {
@@ -46,16 +56,6 @@ export default function MatchdayPage() {
       load();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao retirar da lista');
-    }
-  }
-
-  async function cancelPresence() {
-    try {
-      await api.delete(`/matchdays/${id}/confirmations/me`);
-      toast.success('Presença cancelada');
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao cancelar presença');
     }
   }
 
@@ -83,14 +83,26 @@ export default function MatchdayPage() {
           mine?.status === 'confirmed' ? (
             <div className="rounded bg-emerald-500/10 border border-emerald-600/40 p-3 text-center">
               <p className="text-emerald-400 font-medium">Sua presença está confirmada ✓</p>
-              <button onClick={cancelPresence} className="text-xs text-gray-400 underline mt-1">
-                cancelar presença
+              <button onClick={declinePresence} className="text-xs text-gray-400 underline mt-1">
+                mudei de ideia, não vou
+              </button>
+            </div>
+          ) : mine?.status === 'declined' ? (
+            <div className="rounded bg-red-500/10 border border-red-700/50 p-3 text-center">
+              <p className="text-red-400 font-medium">Você avisou que não vai ❌</p>
+              <button onClick={confirmPresence} className="text-xs text-gray-400 underline mt-1">
+                mudei de ideia, vou jogar
               </button>
             </div>
           ) : (
-            <Button onClick={confirmPresence} className="w-full text-base py-3">
-              Confirmar minha presença
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={confirmPresence} className="flex-1 text-base py-3">
+                Confirmar presença
+              </Button>
+              <Button variant="danger" onClick={declinePresence} className="text-base py-3">
+                Não vou
+              </Button>
+            </div>
           )
         ) : (
           mine?.status === 'confirmed' && (

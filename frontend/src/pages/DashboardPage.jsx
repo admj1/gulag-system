@@ -52,6 +52,16 @@ export default function DashboardPage() {
     }
   }
 
+  async function declinePresence() {
+    try {
+      await api.post(`/matchdays/${open.id}/decline`);
+      setMyStatus('declined');
+      toast.success('Avisado que você não vai');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao avisar ausência');
+    }
+  }
+
   if (loading) return <p className="text-gray-400">Carregando...</p>;
 
   return (
@@ -64,11 +74,26 @@ export default function DashboardPage() {
           {myStatus === 'confirmed' ? (
             <div className="mt-3 rounded bg-emerald-500/10 border border-emerald-600/40 p-3 text-center">
               <p className="text-emerald-400 font-medium">Sua presença está confirmada ✓</p>
+              <button onClick={declinePresence} className="text-xs text-gray-400 underline mt-1">
+                mudei de ideia, não vou
+              </button>
+            </div>
+          ) : myStatus === 'declined' ? (
+            <div className="mt-3 rounded bg-red-500/10 border border-red-700/50 p-3 text-center">
+              <p className="text-red-400 font-medium">Você avisou que não vai ❌</p>
+              <button onClick={confirmPresence} className="text-xs text-gray-400 underline mt-1">
+                mudei de ideia, vou jogar
+              </button>
             </div>
           ) : (
-            <Button onClick={confirmPresence} className="w-full text-base py-3 mt-3">
-              Confirmar minha presença
-            </Button>
+            <div className="flex gap-2 mt-3">
+              <Button onClick={confirmPresence} className="flex-1 text-base py-3">
+                Confirmar presença
+              </Button>
+              <Button variant="danger" onClick={declinePresence} className="text-base py-3">
+                Não vou
+              </Button>
+            </div>
           )}
 
           <Link to={`/peladas/${open.id}`} className="block text-center text-sm text-gulag-cyan underline mt-3">

@@ -77,15 +77,16 @@ function AtaRow({ position, entry, onToggle, onRemove, canEdit, currentPlayerId,
   const isWaitlist = entry.status === 'waitlist';
   const isDeclined = entry.status === 'declined';
 
+  // Vermelho = avisou que nao vai; cinza = apenas nao respondeu
   const color = isConfirmed
     ? 'text-emerald-400 font-medium'
     : isDeclined
-      ? 'text-gray-600 line-through'
+      ? 'text-red-400 font-medium'
       : isWaitlist
         ? 'text-amber-400'
         : 'text-gray-400';
 
-  const label = isWaitlist ? 'espera' : isDeclined ? 'não confirmou' : null;
+  const label = isWaitlist ? 'espera' : null;
   const removable = canRemove(entry);
 
   const content = (
@@ -102,6 +103,7 @@ function AtaRow({ position, entry, onToggle, onRemove, canEdit, currentPlayerId,
       {isMe && <span className="text-[10px] text-gulag-cyan border border-gulag-cyan/50 rounded px-1 shrink-0">você</span>}
       {label && <span className="text-xs text-gray-500 shrink-0">{label}</span>}
       {isConfirmed && <span className="text-emerald-400 text-xs shrink-0">✓</span>}
+      {isDeclined && <span className="text-xs shrink-0" title="Não vai">❌</span>}
     </>
   );
 

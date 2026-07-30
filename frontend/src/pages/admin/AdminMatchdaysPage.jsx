@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
 import Modal from '../../components/Modal';
+import PlayerPicker from '../../components/PlayerPicker';
 import { inputClass, Button, Card, Field, EmptyState } from '../../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
@@ -12,6 +13,7 @@ export default function AdminMatchdaysPage() {
   const [matchdays, setMatchdays] = useState([]);
   const [seasons, setSeasons] = useState([]);
   const [showAta, setShowAta] = useState(false);
+  const [showRetro, setShowRetro] = useState(false);
   const [showSeason, setShowSeason] = useState(false);
   const [editingSeason, setEditingSeason] = useState(null);
 
@@ -46,7 +48,17 @@ export default function AdminMatchdaysPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card title="Peladas" action={<Button onClick={() => setShowAta(true)}>+ Lançar ATA</Button>}>
+      <Card
+        title="Peladas"
+        action={
+          <div className="flex gap-2 flex-wrap justify-end">
+            <Button onClick={() => setShowAta(true)}>+ Lançar ATA</Button>
+            <Button variant="secondary" onClick={() => setShowRetro(true)}>
+              + ATA Retroativa
+            </Button>
+          </div>
+        }
+      >
         {matchdays.length === 0 ? (
           <EmptyState>Nenhuma pelada lançada.</EmptyState>
         ) : (
@@ -97,6 +109,7 @@ export default function AdminMatchdaysPage() {
       </Card>
 
       {showAta && <AtaModal onClose={() => setShowAta(false)} onCreated={load} />}
+      {showRetro && <RetroactiveAtaModal onClose={() => setShowRetro(false)} onCreated={load} />}
       {(showSeason || editingSeason) && (
         <SeasonModal
           season={editingSeason}
@@ -116,7 +129,6 @@ function AtaModal({ onClose, onCreated }) {
   const [roster, setRoster] = useState([]);
   const [diaristas, setDiaristas] = useState([]);
   const [selectedDiaristas, setSelectedDiaristas] = useState([]);
-  const [confirmAll, setConfirmAll] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -124,19 +136,12 @@ function AtaModal({ onClose, onCreated }) {
     api.get('/players', { params: { type: 'diarista' } }).then(({ data }) => setDiaristas(data));
   }, []);
 
-  function toggleDiarista(id) {
-    setSelectedDiaristas((prev) => (
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    ));
-  }
-
   async function confirm() {
     setSaving(true);
     try {
       const { data } = await api.post('/matchdays/from-roster', {
         match_date: matchDate,
         diarista_ids: selectedDiaristas,
-        confirm_all: confirmAll,
       });
       toast.success('ATA lançada');
       onCreated();
@@ -185,46 +190,98 @@ function AtaModal({ onClose, onCreated }) {
           </div>
         )}
 
-        {diaristas.length > 0 && (
-          <div>
-            <h3 className="text-sm font-semibold text-gray-300 mb-1">Incluir diaristas (opcional)</h3>
-            <ul className="grid gap-1 sm:grid-cols-2">
-              {diaristas.map((p) => (
-                <li key={p.id}>
-                  <label className="flex items-center gap-2 text-sm text-gray-200 py-1">
-                    <input
-                      type="checkbox"
-                      checked={selectedDiaristas.includes(p.id)}
-                      onChange={() => toggleDiarista(p.id)}
-                      className="w-4 h-4"
-                    />
-                    <span className="truncate">{p.name}</span>
-                    {selectedDiaristas.includes(p.id) && (
-                      <span className="text-xs text-gulag-cyan">
-                        {selectedDiaristas.indexOf(p.id) + 1}º
-                      </span>
-                    )}
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <label className="flex items-center gap-2 text-sm text-gray-300">
-          <input
-            type="checkbox"
-            checked={confirmAll}
-            onChange={(e) => setConfirmAll(e.target.checked)}
-            className="w-4 h-4"
-          />
-          Já marcar todos como presentes (ata retroativa, do papel)
-        </label>
+        <PlayerPicker
+          players={diaristas}
+          selected={selectedDiaristas}
+          onChange={setSelectedDiaristas}
+          label="Incluir diaristas (opcional)"
+          ordered
+          emptyLabel="Nenhum diarista incluído — eles também podem se inscrever sozinhos."
+        />
 
         <div className="flex gap-2 justify-end sticky bottom-0 bg-gulag-surface pt-2">
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
           <Button onClick={confirm} disabled={saving}>
             {saving ? 'Lançando...' : 'Confirmar'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ATA retroativa: lancamento manual a partir do papel. Cria a pelada ja fechada
+// com quem jogou e os times vazios, para o admin montar e preencher a sumula.
+function RetroactiveAtaModal({ onClose, onCreated }) {
+  const navigate = useNavigate();
+  const [matchDate, setMatchDate] = useState(new Date().toISOString().slice(0, 10));
+  const [numberOfTeams, setNumberOfTeams] = useState(4);
+  const [players, setPlayers] = useState([]);
+  const [selected, setSelected] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get('/players').then(({ data }) => setPlayers(data));
+  }, []);
+
+  async function confirm() {
+    if (selected.length === 0) return toast.error('Selecione quem jogou nesse dia');
+    setSaving(true);
+    try {
+      const { data } = await api.post('/matchdays/retroactive', {
+        match_date: matchDate,
+        player_ids: selected,
+        number_of_teams: Number(numberOfTeams),
+      });
+      toast.success('ATA retroativa criada. Monte os times e preencha a súmula.');
+      onCreated();
+      onClose();
+      navigate(`/admin/matchdays/${data.id}`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao criar ATA retroativa');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Lançar ATA Retroativa" onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        <p className="text-xs text-gray-500">
+          Para lançar uma pelada que já aconteceu. Informe a data, quantos times foram e quem
+          jogou. Na tela seguinte você arrasta os jogadores para os times e preenche a súmula
+          em branco, no mesmo formato da ata.
+        </p>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Data da pelada">
+            <input
+              type="date" value={matchDate}
+              onChange={(e) => setMatchDate(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Quantidade de times">
+            <input
+              type="number" min="2" max="8" value={numberOfTeams}
+              onChange={(e) => setNumberOfTeams(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+        </div>
+
+        <PlayerPicker
+          players={players}
+          selected={selected}
+          onChange={setSelected}
+          label="Quem jogou"
+          emptyLabel="Nenhum jogador selecionado ainda."
+        />
+
+        <div className="flex gap-2 justify-end sticky bottom-0 bg-gulag-surface pt-2">
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button onClick={confirm} disabled={saving}>
+            {saving ? 'Criando...' : `Criar súmula (${selected.length})`}
           </Button>
         </div>
       </div>

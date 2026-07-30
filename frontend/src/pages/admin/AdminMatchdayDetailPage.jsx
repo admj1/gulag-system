@@ -50,6 +50,10 @@ export default function AdminMatchdayDetailPage() {
   const goalkeepers = confirmed.filter((c) => c.player_type === 'goleiro');
   const inAta = new Set(confirmations.map((c) => c.player_id));
   const availableDiaristas = allDiaristas.filter((p) => !inAta.has(p.id));
+  // Confirmados que ainda nao estao em nenhum time (usado na ata retroativa)
+  const unassigned = linePlayers
+    .filter((c) => !playerTeamId[c.player_id])
+    .map((c) => ({ id: c.player_id, name: c.name, stars: c.stars }));
   // O admin tambem joga: precisa confirmar a propria presenca como qualquer mensalista
   const mine = confirmations.find((c) => c.player_id === player?.id);
   // Considera o que esta na tela, para o destaque aparecer ja ao digitar
@@ -119,7 +123,12 @@ export default function AdminMatchdayDetailPage() {
       if (found) moved = found;
       return { ...t, players: t.players.filter((p) => p.id !== playerId) };
     });
-    if (!moved) return;
+    // Pode vir do grupo "sem time", que nao esta em nenhum time ainda
+    if (!moved) {
+      const fromPool = confirmations.find((c) => c.player_id === playerId);
+      if (!fromPool) return;
+      moved = { id: playerId, name: fromPool.name, stars: fromPool.stars };
+    }
     setTeams(optimistic.map((t) => (
       t.id === teamId ? { ...t, players: [...t.players, moved] } : t
     )));
@@ -270,7 +279,7 @@ export default function AdminMatchdayDetailPage() {
           </div>
         }
       >
-        <TeamDraw teams={teams} onMovePlayer={movePlayer} />
+        <TeamDraw teams={teams} onMovePlayer={movePlayer} unassigned={unassigned} />
       </Card>
 
       <h2 className="text-lg font-semibold text-gray-100 mt-2">Súmula</h2>

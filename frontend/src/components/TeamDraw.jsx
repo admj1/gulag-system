@@ -16,7 +16,7 @@ import { EmptyState } from './ui';
 // Arrastar e soltar jogadores entre os times.
 // No celular vale o toque longo: 200ms segurando antes de comecar a arrastar,
 // senao o gesto e tratado como rolagem normal da pagina.
-export default function TeamDraw({ teams, onMovePlayer }) {
+export default function TeamDraw({ teams, onMovePlayer, unassigned = [] }) {
   const [dragging, setDragging] = useState(null);
 
   const sensors = useSensors(
@@ -40,6 +40,8 @@ export default function TeamDraw({ teams, onMovePlayer }) {
     return <EmptyState>Times ainda não sorteados.</EmptyState>;
   }
 
+  const pool = { id: 'sem-time', name: 'Sem time', players: unassigned, wins: 0, draws: 0, losses: 0 };
+
   return (
     <DndContext
       sensors={sensors}
@@ -51,6 +53,13 @@ export default function TeamDraw({ teams, onMovePlayer }) {
       <p className="text-xs text-gray-500 mb-2">
         Segure em um nome e arraste para outro time.
       </p>
+
+      {unassigned.length > 0 && (
+        <div className="mb-3">
+          <TeamColumn team={pool} draggingTeamId={dragging?.teamId} isPool />
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2">
         {teams.map((team) => (
           <TeamColumn key={team.id} team={team} draggingTeamId={dragging?.teamId} />
@@ -68,7 +77,7 @@ export default function TeamDraw({ teams, onMovePlayer }) {
   );
 }
 
-function TeamColumn({ team, draggingTeamId }) {
+function TeamColumn({ team, draggingTeamId, isPool = false }) {
   const { setNodeRef, isOver } = useDroppable({ id: team.id });
   const isSource = draggingTeamId === team.id;
   const totalStars = team.players.reduce((sum, p) => sum + Number(p.stars), 0);
@@ -79,12 +88,17 @@ function TeamColumn({ team, draggingTeamId }) {
       className={`border rounded p-2 transition-colors ${
         isOver && !isSource
           ? 'border-gulag-cyan bg-gulag-cyan/10'
-          : 'border-gulag-border'
+          : isPool
+            ? 'border-dashed border-gulag-border'
+            : 'border-gulag-border'
       }`}
     >
-      <p className="font-medium text-gray-100 mb-2">
-        {team.name} <span className="text-xs text-gray-500">({totalStars}★)</span>
-        {(team.wins || team.draws || team.losses) > 0 && (
+      <p className={`font-medium mb-2 ${isPool ? 'text-amber-300' : 'text-gray-100'}`}>
+        {team.name}{' '}
+        <span className="text-xs text-gray-500">
+          {isPool ? `(${team.players.length} sem time)` : `(${totalStars}★)`}
+        </span>
+        {!isPool && (team.wins || team.draws || team.losses) > 0 && (
           <span className="text-xs text-gulag-cyan ml-1">
             {team.wins}V · {team.draws}E · {team.losses}D
           </span>

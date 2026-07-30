@@ -17,6 +17,23 @@ async function create(req, res, next) {
   }
 }
 
+// Temporada da data informada; cria a do ano se ainda nao existir
+async function resolveSeason(client, matchDate) {
+  const { rows: existing } = await client.query(
+    `SELECT id FROM seasons WHERE year = EXTRACT(YEAR FROM $1::date) ORDER BY id LIMIT 1`,
+    [matchDate]
+  );
+  if (existing[0]) return existing[0].id;
+
+  const { rows } = await client.query(
+    `INSERT INTO seasons (name, year, start_date)
+     VALUES (EXTRACT(YEAR FROM $1::date)::int::text, EXTRACT(YEAR FROM $1::date)::int, date_trunc('year', $1::date))
+     RETURNING id`,
+    [matchDate]
+  );
+  return rows[0].id;
+}
+
 // Admin: previa do elenco padrao da ata (mensalistas numerados + goleiros)
 async function rosterPreview(req, res, next) {
   try {
@@ -45,23 +62,7 @@ async function createFromRoster(req, res, next) {
     const settings = await getSettings();
     await client.query('BEGIN');
 
-    let seasonId = season_id || null;
-    if (!seasonId) {
-      const { rows } = await client.query(
-        `SELECT id FROM seasons WHERE year = EXTRACT(YEAR FROM $1::date) ORDER BY id LIMIT 1`,
-        [match_date]
-      );
-      seasonId = rows[0]?.id || null;
-    }
-    if (!seasonId) {
-      const { rows } = await client.query(
-        `INSERT INTO seasons (name, year, start_date)
-         VALUES (EXTRACT(YEAR FROM $1::date)::int::text, EXTRACT(YEAR FROM $1::date)::int, date_trunc('year', $1::date))
-         RETURNING id`,
-        [match_date]
-      );
-      seasonId = rows[0].id;
-    }
+    const seasonId = season_id || await resolveSeason(client, match_date);
 
     const { rows: matchdayRows } = await client.query(
       `INSERT INTO matchdays (season_id, match_date, confirmation_deadline, status)
@@ -88,6 +89,64 @@ async function createFromRoster(req, res, next) {
          VALUES ($1, $2, $3, 'confirmed')
          ON CONFLICT (matchday_id, player_id) DO UPDATE SET status = 'confirmed', queue_position = EXCLUDED.queue_position`,
         [matchday.id, playerId, position]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json(matchday);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
+// Admin: ata retroativa a partir do papel. Cria a pelada ja fechada, marca quem jogou
+// e abre os times vazios para o admin montar e preencher a sumula na mao.
+async function createRetroactive(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const { match_date, player_ids = [], number_of_teams = 4 } = req.body;
+    if (!match_date) return res.status(400).json({ error: 'Informe a data da pelada' });
+    if (player_ids.length === 0) {
+      return res.status(400).json({ error: 'Selecione quem jogou nesse dia' });
+    }
+
+    const settings = await getSettings();
+    const teamCount = Math.min(8, Math.max(2, Number(number_of_teams) || 4));
+    await client.query('BEGIN');
+
+    const seasonId = await resolveSeason(client, match_date);
+
+    const { rows: matchdayRows } = await client.query(
+      `INSERT INTO matchdays (season_id, match_date, confirmation_deadline, status)
+       VALUES ($1, $2, ($2::date + $3::time), 'closed')
+       RETURNING *`,
+      [seasonId, match_date, settings.match_time]
+    );
+    const matchday = matchdayRows[0];
+
+    let position = 0;
+    for (const playerId of player_ids) {
+      const { rows: player } = await client.query(
+        'SELECT player_type FROM players WHERE id = $1', [playerId]
+      );
+      if (!player[0]) continue;
+      position += 1;
+      await client.query(
+        `INSERT INTO confirmations (matchday_id, player_id, queue_position, status)
+         VALUES ($1, $2, $3, 'confirmed')
+         ON CONFLICT (matchday_id, player_id) DO UPDATE SET status = 'confirmed'`,
+        [matchday.id, playerId, player[0].player_type === 'diarista' ? position : null]
+      );
+    }
+
+    // Times vazios: o admin arrasta os jogadores para dentro
+    for (let i = 0; i < teamCount; i += 1) {
+      await client.query(
+        `INSERT INTO teams (matchday_id, name) VALUES ($1, $2)`,
+        [matchday.id, `Time ${String.fromCharCode(65 + i)}`]
       );
     }
 
@@ -134,6 +193,42 @@ async function getConfirmations(req, res, next) {
       [req.params.id]
     );
     res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Jogador avisa que nao vai ("Nao vou"). Mensalista fica marcado como recusado
+// na lista; diarista simplesmente sai da fila.
+async function declineOwn(req, res, next) {
+  try {
+    const { rows: matchdayRows } = await pool.query(
+      'SELECT status FROM matchdays WHERE id = $1', [req.params.id]
+    );
+    if (!matchdayRows[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
+    if (matchdayRows[0].status !== 'open' && req.user.role !== 'admin') {
+      return res.status(409).json({ error: 'A lista desta pelada já foi fechada' });
+    }
+
+    const { rows: playerRows } = await pool.query(
+      'SELECT player_type FROM players WHERE id = $1', [req.user.id]
+    );
+    if (playerRows[0]?.player_type === 'diarista') {
+      await pool.query(
+        'DELETE FROM confirmations WHERE matchday_id = $1 AND player_id = $2',
+        [req.params.id, req.user.id]
+      );
+      return res.json({ status: 'removed' });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO confirmations (matchday_id, player_id, status)
+       VALUES ($1, $2, 'declined')
+       ON CONFLICT (matchday_id, player_id) DO UPDATE SET status = 'declined', queue_position = NULL
+       RETURNING status`,
+      [req.params.id, req.user.id]
+    );
+    res.json(rows[0]);
   } catch (err) {
     next(err);
   }
@@ -378,21 +473,12 @@ async function closeMatchday(matchdayId) {
        WHERE c.matchday_id = $1 AND p.player_type = 'mensalista' AND c.status = 'confirmed'`,
       [matchdayId]
     );
+    // Quem simplesmente nao respondeu continua 'pending' (aparece como "nao confirmou"),
+    // diferente de quem avisou que nao vai, que fica 'declined'.
     const { rows: mensalistasAusentes } = await client.query(
-      `UPDATE confirmations c SET status = 'declined'
-       FROM players p
-       WHERE p.id = c.player_id AND c.matchday_id = $1
-         AND p.player_type = 'mensalista' AND c.status = 'pending'
-       RETURNING c.id`,
-      [matchdayId]
-    );
-
-    // Goleiros nao disputam as vagas de linha; quem nao confirmou apenas sai da relacao
-    await client.query(
-      `UPDATE confirmations c SET status = 'declined'
-       FROM players p
-       WHERE p.id = c.player_id AND c.matchday_id = $1
-         AND p.player_type = 'goleiro' AND c.status = 'pending'`,
+      `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
+       WHERE c.matchday_id = $1 AND p.player_type = 'mensalista'
+         AND c.status IN ('pending', 'declined')`,
       [matchdayId]
     );
     const { rows: goleiros } = await client.query(
@@ -646,4 +732,5 @@ module.exports = {
   create, list, getById, getConfirmations, confirm, closeList, closeMatchday,
   drawTeams, submitSummary, getSummary, getTeams, moveTeamPlayer, rosterPreview, createFromRoster, remove,
   setConfirmation, removeConfirmation, invitePlayer, cancelOwnConfirmation,
+  declineOwn, createRetroactive,
 };

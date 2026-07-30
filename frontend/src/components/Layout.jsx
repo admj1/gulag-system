@@ -4,18 +4,18 @@ import { useAuth } from '../context/AuthContext';
 import { Avatar } from './ui';
 
 const LINKS = [
-  { to: '/', label: 'Peladas', icon: '⚽', end: true },
-  { to: '/rankings', label: 'Rankings', icon: '🏆' },
-  { to: '/players', label: 'Jogadores', icon: '👥' },
-  { to: '/perfil', label: 'Meu perfil', icon: '🙋' },
+  { to: '/', label: 'PELADAS', end: true },
+  { to: '/rankings', label: 'RANKINGS' },
+  { to: '/players', label: 'JOGADORES' },
+  { to: '/perfil', label: 'MEU PERFIL' },
 ];
 
 const ADMIN_LINKS = [
-  { to: '/admin/players', label: 'Cadastro de Jogadores', icon: '📋' },
-  { to: '/admin/matchdays', label: 'Peladas', icon: '📅' },
-  { to: '/admin/finance', label: 'Financeiro', icon: '💰' },
-  { to: '/admin/whatsapp', label: 'WhatsApp', icon: '💬' },
-  { to: '/admin/settings', label: 'Configurações', icon: '⚙️' },
+  { to: '/admin/players', label: 'CADASTRO DE JOGADORES' },
+  { to: '/admin/matchdays', label: 'PELADAS' },
+  { to: '/admin/finance', label: 'FINANCEIRO' },
+  { to: '/admin/whatsapp', label: 'WHATSAPP' },
+  { to: '/admin/settings', label: 'CONFIGURAÇÕES' },
 ];
 
 export default function Layout() {
@@ -120,20 +120,19 @@ export default function Layout() {
 function SidebarGroup({ links }) {
   return (
     <ul className="flex flex-col">
-      {links.map(({ to, label, icon, end }) => (
+      {links.map(({ to, label, end }) => (
         <li key={to}>
           <NavLink
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 text-sm border-l-2 ${
+              `block px-4 py-3 text-xs tracking-wide border-l-2 ${
                 isActive
-                  ? 'border-gulag-cyan text-gulag-cyan bg-gulag-cyan/10 font-medium'
+                  ? 'border-gulag-cyan text-gulag-cyan bg-gulag-cyan/10 font-semibold'
                   : 'border-transparent text-gray-300 hover:text-gulag-cyan'
               }`
             }
           >
-            <span aria-hidden="true">{icon}</span>
             {label}
           </NavLink>
         </li>
