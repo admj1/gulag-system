@@ -102,6 +102,67 @@ export default function MyProfilePage() {
           </div>
         </form>
       </Card>
+
+      <ChangePasswordCard />
     </div>
+  );
+}
+
+// Pede a senha atual e a nova duas vezes, para nao trocar por erro de digitacao
+function ChangePasswordCard() {
+  const { register, handleSubmit, reset, watch, formState } = useForm();
+  const newPassword = watch('new_password');
+
+  async function onSubmit(values) {
+    if (values.new_password !== values.confirm_password) {
+      toast.error('A confirmação não confere com a nova senha');
+      return;
+    }
+    try {
+      await api.put('/players/me/password', {
+        current_password: values.current_password,
+        new_password: values.new_password,
+      });
+      toast.success('Senha alterada');
+      reset();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao alterar senha');
+    }
+  }
+
+  const confirmValue = watch('confirm_password');
+  const mismatch = !!confirmValue && confirmValue !== newPassword;
+
+  return (
+    <Card title="Mudar senha">
+      <form onSubmit={handleSubmit(onSubmit)} className="grid gap-3 sm:grid-cols-2">
+        <Field label="Senha atual *">
+          <input
+            {...register('current_password', { required: true })}
+            type="password" autoComplete="current-password" className={inputClass}
+          />
+        </Field>
+        <div className="hidden sm:block" />
+        <Field label="Nova senha * (mínimo 6 caracteres)">
+          <input
+            {...register('new_password', { required: true, minLength: 6 })}
+            type="password" autoComplete="new-password" className={inputClass}
+          />
+        </Field>
+        <Field label="Confirme a nova senha *">
+          <input
+            {...register('confirm_password', { required: true })}
+            type="password" autoComplete="new-password"
+            className={`${inputClass} ${mismatch ? 'border-red-500' : ''}`}
+          />
+        </Field>
+        {mismatch && (
+          <p className="sm:col-span-2 text-xs text-red-400">As duas senhas não são iguais.</p>
+        )}
+        <div className="sm:col-span-2">
+          <Button disabled={formState.isSubmitting || mismatch}>Alterar senha</Button>
+        </div>
+      </form>
+    </Card>
   );
 }

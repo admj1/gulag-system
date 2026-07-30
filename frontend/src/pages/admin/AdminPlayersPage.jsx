@@ -188,6 +188,7 @@ function PlayerRow({ player, onChange, isOwner }) {
             {player.stars}★
             {!player.active ? ' · inativo' : ''}
             {player.blocked ? ' · bloqueado' : ''}
+            {player.login_locked && <span className="text-red-400"> · senha bloqueada</span>}
             {isIncomplete(player) && <span className="text-amber-400"> · sem telefone</span>}
           </p>
         </div>
@@ -264,6 +265,16 @@ function PlayerEditor({ player, onChange, isOwner }) {
       onChange();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao excluir cadastro');
+    }
+  }
+
+  async function unlockLogin() {
+    try {
+      await api.patch(`/players/${player.id}/unlock`);
+      toast.success('Senha liberada. Cadastre uma nova senha para o jogador.');
+      onChange();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao liberar senha');
     }
   }
 
@@ -365,6 +376,12 @@ function PlayerEditor({ player, onChange, isOwner }) {
         <Button variant={player.blocked ? 'secondary' : 'danger'} onClick={toggleBlock}>
           {player.blocked ? 'Desbloquear cadastro' : 'Bloquear cadastro'}
         </Button>
+
+        {player.login_locked && (
+          <Button variant="secondary" onClick={unlockLogin}>
+            Liberar senha bloqueada
+          </Button>
+        )}
 
         {!player.is_owner && (
           <>

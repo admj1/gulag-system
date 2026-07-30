@@ -3,7 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 // A navegacao entre as areas do admin fica na sidebar; aqui so o titulo da secao
 const TITLES = {
   '/admin/players': 'Jogadores',
-  '/admin/matchdays': 'Peladas',
+  '/admin/matchdays': 'Gerenciamento de ATAS',
   '/admin/finance': 'Financeiro',
   '/admin/whatsapp': 'Confirmação por WhatsApp',
   '/admin/settings': 'Configurações',
@@ -11,7 +11,8 @@ const TITLES = {
 
 export default function AdminLayout() {
   const { pathname } = useLocation();
-  const title = TITLES[pathname] || (pathname.startsWith('/admin/matchdays/') ? 'Peladas' : 'Administração');
+  const title = TITLES[pathname]
+    || (pathname.startsWith('/admin/matchdays/') ? 'Gerenciamento de ATAS' : 'Administração');
 
   return (
     <div className="flex flex-col gap-4">

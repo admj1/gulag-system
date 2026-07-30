@@ -10,6 +10,7 @@ router.use(authenticate);
 router.get('/', controller.list);
 router.get('/me', controller.getMe);
 router.put('/me', controller.updateMe);
+router.put('/me/password', controller.changeMyPassword);
 router.post('/me/photo', upload.single('photo'), (req, res) => {
   res.status(201).json({ photo_url: `/uploads/${req.file.filename}` });
 });
@@ -20,6 +21,7 @@ router.delete('/:id', requireAdmin, controller.remove);
 router.patch('/:id/block', requireAdmin, controller.setBlock);
 router.patch('/:id/status', requireAdmin, controller.changeStatus);
 router.patch('/:id/active', requireAdmin, controller.setActive);
+router.patch('/:id/unlock', requireAdmin, controller.unlockLogin);
 // Autorizacao no controller: somente o dono do sistema
 router.patch('/:id/role', requireAdmin, controller.setRole);
 

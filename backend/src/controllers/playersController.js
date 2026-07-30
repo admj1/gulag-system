@@ -4,7 +4,7 @@ const { displayNameSql } = require('../config/settings');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
   phone, email, photo_url, position, stars, role, player_type, blocked, mensalista_number,
-  active, is_owner`;
+  active, is_owner, login_locked`;
 
 // Mensalistas seguem a propria numeracao; os demais ficam em ordem alfabetica
 const PLAYER_ORDER = `mensalista_number NULLS LAST, ${displayNameSql()}`;
@@ -102,6 +102,52 @@ async function updateMe(req, res, next) {
   }
 }
 
+// Jogador troca a propria senha, confirmando a senha atual
+async function changeMyPassword(req, res, next) {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'Informe a senha atual e a nova senha' });
+    }
+    if (String(new_password).length < 6) {
+      return res.status(400).json({ error: 'A nova senha precisa ter ao menos 6 caracteres' });
+    }
+
+    const { rows } = await pool.query('SELECT password_hash FROM players WHERE id = $1', [req.user.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
+
+    if (!(await bcrypt.compare(current_password, rows[0].password_hash))) {
+      return res.status(401).json({ error: 'Senha atual incorreta' });
+    }
+
+    const passwordHash = await bcrypt.hash(new_password, 10);
+    await pool.query(
+      `UPDATE players SET password_hash = $1, failed_login_attempts = 0, login_locked = FALSE
+       WHERE id = $2`,
+      [passwordHash, req.user.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Admin libera a senha bloqueada por tentativas erradas
+async function unlockLogin(req, res, next) {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE players SET login_locked = FALSE, failed_login_attempts = 0
+       WHERE id = $1
+       RETURNING id, ${displayNameSql()} AS name, login_locked`,
+      [req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Admin: cadastro manual de jogador (import inicial)
 async function create(req, res, next) {
   try {
@@ -176,7 +222,10 @@ async function update(req, res, next) {
          mensalista_number = CASE WHEN $8::boolean THEN $9::int ELSE mensalista_number END,
          phone = CASE WHEN $10::boolean THEN NULLIF($11, '') ELSE phone END,
          email = CASE WHEN $12::boolean THEN NULLIF($13, '') ELSE email END,
-         password_hash = COALESCE($14, password_hash)
+         password_hash = COALESCE($14, password_hash),
+         -- Senha nova do admin tambem libera o bloqueio por tentativas
+         login_locked = CASE WHEN $14 IS NOT NULL THEN FALSE ELSE login_locked END,
+         failed_login_attempts = CASE WHEN $14 IS NOT NULL THEN 0 ELSE failed_login_attempts END
        WHERE id = $15
        RETURNING ${PLAYER_FIELDS}`,
       [first_name, last_name,
@@ -365,5 +414,5 @@ async function setRole(req, res, next) {
 
 module.exports = {
   list, getById, getMe, updateMe, create, update, setBlock, changeStatus,
-  setActive, remove, setRole,
+  setActive, remove, setRole, changeMyPassword, unlockLogin,
 };

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { confirmLeave } from './unsavedGuard';
 import { Avatar } from './ui';
 
 const LINKS = [
@@ -12,7 +13,7 @@ const LINKS = [
 
 const ADMIN_LINKS = [
   { to: '/admin/players', label: 'CADASTRO DE JOGADORES' },
-  { to: '/admin/matchdays', label: 'PELADAS' },
+  { to: '/admin/matchdays', label: 'GERENCIAMENTO DE ATAS' },
   { to: '/admin/finance', label: 'FINANCEIRO' },
   { to: '/admin/whatsapp', label: 'WHATSAPP' },
   { to: '/admin/settings', label: 'CONFIGURAÇÕES' },
@@ -89,7 +90,7 @@ export default function Layout() {
               <button
                 onClick={() => setAdminOpen((v) => !v)}
                 aria-expanded={adminOpen}
-                className="w-full flex items-center gap-2 px-4 py-2 text-[11px] uppercase tracking-wide text-gray-400 hover:text-gulag-cyan"
+                className="w-full flex items-center gap-2 px-4 py-3 text-sm uppercase tracking-wide text-gray-400 hover:text-gulag-cyan"
               >
                 <span aria-hidden="true" className="text-xs">{adminOpen ? '▾' : '▸'}</span>
                 Administração
@@ -125,8 +126,10 @@ function SidebarGroup({ links }) {
           <NavLink
             to={to}
             end={end}
+            // Avisa antes de sair de uma tela com edicoes pendentes
+            onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}
             className={({ isActive }) =>
-              `block px-4 py-3 text-xs tracking-wide border-l-2 ${
+              `block px-4 py-4 text-base tracking-wide border-l-2 ${
                 isActive
                   ? 'border-gulag-cyan text-gulag-cyan bg-gulag-cyan/10 font-semibold'
                   : 'border-transparent text-gray-300 hover:text-gulag-cyan'

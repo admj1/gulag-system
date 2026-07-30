@@ -32,10 +32,97 @@ async function playerProfile(req, res, next) {
       [id]
     );
 
-    res.json({ totals: totals[0], goalkeeperTotals: goalkeeperTotals[0] });
+    const teamTotals = await collectiveTotals(id);
+
+    res.json({
+      totals: totals[0],
+      goalkeeperTotals: goalkeeperTotals[0],
+      collective: teamTotals,
+    });
   } catch (err) {
     next(err);
   }
+}
+
+// Melhor time do dia: mais vitorias e, no empate, menos derrotas.
+// Dias com empate total na lideranca nao contam para ninguem.
+const BEST_TEAM_SQL = `
+  WITH jogados AS (
+    SELECT * FROM teams WHERE wins + draws + losses > 0
+  ),
+  mais_vitorias AS (
+    SELECT matchday_id, MAX(wins) AS w FROM jogados GROUP BY matchday_id
+  ),
+  candidatos AS (
+    SELECT j.* FROM jogados j
+    JOIN mais_vitorias mv ON mv.matchday_id = j.matchday_id AND j.wins = mv.w
+  ),
+  menos_derrotas AS (
+    SELECT matchday_id, MIN(losses) AS l FROM candidatos GROUP BY matchday_id
+  ),
+  campeoes AS (
+    SELECT c.* FROM candidatos c
+    JOIN menos_derrotas md ON md.matchday_id = c.matchday_id AND c.losses = md.l
+  )
+  SELECT * FROM campeoes camp
+  WHERE (SELECT COUNT(*) FROM campeoes c2 WHERE c2.matchday_id = camp.matchday_id) = 1
+`;
+
+async function collectiveTotals(playerId) {
+  const { rows: totals } = await pool.query(
+    `SELECT
+       COUNT(DISTINCT t.matchday_id)::int AS peladas,
+       COALESCE(SUM(t.wins), 0)::int AS wins,
+       COALESCE(SUM(t.draws), 0)::int AS draws,
+       COALESCE(SUM(t.losses), 0)::int AS losses
+     FROM team_players tp
+     JOIN teams t ON t.id = tp.team_id
+     WHERE tp.player_id = $1`,
+    [playerId]
+  );
+
+  const { rows: best } = await pool.query(
+    `WITH campeoes AS (${BEST_TEAM_SQL})
+     SELECT COUNT(*)::int AS vezes
+     FROM campeoes c
+     JOIN team_players tp ON tp.team_id = c.id
+     WHERE tp.player_id = $1`,
+    [playerId]
+  );
+
+  // Parceiros de time: com quem mais ganhou e com quem mais perdeu
+  const { rows: mates } = await pool.query(
+    `SELECT companheiro.id,
+            ${displayNameSql('companheiro')} AS name,
+            SUM(t.wins)::int AS wins,
+            SUM(t.draws)::int AS draws,
+            SUM(t.losses)::int AS losses,
+            SUM(t.wins + t.draws + t.losses)::int AS total
+     FROM team_players tp
+     JOIN teams t ON t.id = tp.team_id
+     JOIN team_players tp2 ON tp2.team_id = tp.team_id AND tp2.player_id <> tp.player_id
+     JOIN players companheiro ON companheiro.id = tp2.player_id
+     WHERE tp.player_id = $1 AND t.wins + t.draws + t.losses > 0
+     GROUP BY companheiro.id, companheiro.nickname, companheiro.first_name, companheiro.last_name
+     HAVING SUM(t.wins + t.draws + t.losses) > 0`,
+    [playerId]
+  );
+
+  const withPct = mates.map((m) => ({
+    ...m,
+    winPct: Math.round((m.wins / m.total) * 100),
+    lossPct: Math.round((m.losses / m.total) * 100),
+  }));
+
+  const bestMate = [...withPct].sort((a, b) => b.wins - a.wins || b.winPct - a.winPct)[0] || null;
+  const worstMate = [...withPct].sort((a, b) => b.losses - a.losses || b.lossPct - a.lossPct)[0] || null;
+
+  return {
+    ...totals[0],
+    bestTeamCount: best[0].vezes,
+    bestMate,
+    worstMate,
+  };
 }
 
 function periodFilter({ month, year, seasonId }, startIndex) {

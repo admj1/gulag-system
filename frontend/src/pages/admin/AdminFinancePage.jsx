@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
+import Modal from '../../components/Modal';
 import { inputClass, Button, Card, Field, EmptyState } from '../../components/ui';
 
 const MONTHS = [
@@ -17,6 +18,7 @@ export default function AdminFinancePage() {
   const [monthly, setMonthly] = useState([]);
   const [pending, setPending] = useState([]);
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
+  const [paying, setPaying] = useState(null);
 
   const loadMonthly = useCallback(() => {
     api.get('/finance/monthly', { params: { month, year } }).then(({ data }) => setMonthly(data));
@@ -29,33 +31,47 @@ export default function AdminFinancePage() {
   useEffect(loadMonthly, [loadMonthly]);
   useEffect(loadPending, [loadPending]);
 
-  // A baixa usa a data informada, porque o admin pode registrar dias depois
-  async function toggleMonthly(row) {
+  // Ao clicar em pagar, abre a caixa para informar a data em que o pagamento foi feito
+  function askPaymentDate(target) {
+    setPaidAt(new Date().toISOString().slice(0, 10));
+    setPaying(target);
+  }
+
+  async function confirmPayment() {
+    const paid_at = new Date(`${paidAt}T12:00:00`).toISOString();
     try {
-      const paid = row.status !== 'paid';
-      await api.post('/finance/monthly', {
-        player_id: row.player_id,
-        month, year, paid,
-        paid_at: paid ? new Date(`${paidAt}T12:00:00`).toISOString() : null,
-      });
-      loadMonthly();
+      if (paying.kind === 'monthly') {
+        await api.post('/finance/monthly', {
+          player_id: paying.row.player_id,
+          month, year, paid: true, paid_at,
+        });
+        loadMonthly();
+      } else {
+        await api.patch(`/finance/${paying.item.id}/pay`, { paid_at });
+        loadPending();
+      }
+      setPaying(null);
+      toast.success('Pagamento registrado');
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao atualizar mensalidade');
+      toast.error(err.response?.data?.error || 'Erro ao registrar pagamento');
     }
   }
 
-  async function togglePending(item) {
+  async function undoMonthly(row) {
     try {
-      if (item.status === 'paid') {
-        await api.patch(`/finance/${item.id}/unpay`);
-      } else {
-        await api.patch(`/finance/${item.id}/pay`, {
-          paid_at: new Date(`${paidAt}T12:00:00`).toISOString(),
-        });
-      }
+      await api.post('/finance/monthly', { player_id: row.player_id, month, year, paid: false });
+      loadMonthly();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao desfazer');
+    }
+  }
+
+  async function undoPending(item) {
+    try {
+      await api.patch(`/finance/${item.id}/unpay`);
       loadPending();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao atualizar cobrança');
+      toast.error(err.response?.data?.error || 'Erro ao desfazer');
     }
   }
 
@@ -63,19 +79,27 @@ export default function AdminFinancePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card title="Data do pagamento">
-        <Field label="As baixas abaixo serão registradas com esta data">
-          <input
-            type="date"
-            value={paidAt}
-            onChange={(e) => setPaidAt(e.target.value)}
-            className={inputClass}
-          />
-        </Field>
-        <p className="text-xs text-gray-500 mt-2">
-          Ajuste antes de marcar como pago se o pagamento foi feito em outro dia.
-        </p>
-      </Card>
+      {paying && (
+        <Modal title="Data do pagamento" onClose={() => setPaying(null)}>
+          <p className="text-sm text-gray-300 mb-3">
+            {paying.kind === 'monthly'
+              ? `Mensalidade de ${paying.row.name}`
+              : `${paying.item.name} — ${TYPE_LABELS[paying.item.type]}`}
+          </p>
+          <Field label="Quando o pagamento foi feito">
+            <input
+              type="date"
+              value={paidAt}
+              onChange={(e) => setPaidAt(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <div className="flex gap-2 justify-end mt-4">
+            <Button variant="secondary" onClick={() => setPaying(null)}>Cancelar</Button>
+            <Button onClick={confirmPayment}>Confirmar pagamento</Button>
+          </div>
+        </Modal>
+      )}
 
       <Card title="Mensalidades">
         <div className="grid gap-3 sm:grid-cols-2 mb-4">
@@ -113,7 +137,9 @@ export default function AdminFinancePage() {
                   )}
                   <Button
                     variant={row.status === 'paid' ? 'secondary' : 'primary'}
-                    onClick={() => toggleMonthly(row)}
+                    onClick={() => (row.status === 'paid'
+                      ? undoMonthly(row)
+                      : askPaymentDate({ kind: 'monthly', row }))}
                   >
                     {row.status === 'paid' ? 'Desfazer' : 'Pagar'}
                   </Button>
@@ -156,7 +182,9 @@ export default function AdminFinancePage() {
                         </span>
                         <Button
                           variant={item.status === 'paid' ? 'secondary' : 'primary'}
-                          onClick={() => togglePending(item)}
+                          onClick={() => (item.status === 'paid'
+                            ? undoPending(item)
+                            : askPaymentDate({ kind: 'pending', item }))}
                         >
                           {item.status === 'paid' ? 'Desfazer' : 'Pagar'}
                         </Button>

@@ -15,7 +15,7 @@ export default function PlayerProfilePage() {
 
   if (!player || !profile) return <p className="text-gray-400">Carregando...</p>;
 
-  const { totals, goalkeeperTotals } = profile;
+  const { totals, goalkeeperTotals, collective } = profile;
 
   return (
     <div className="flex flex-col gap-4">
@@ -50,7 +50,7 @@ export default function PlayerProfilePage() {
         </Card>
       )}
 
-      <Card title="Estatísticas de linha">
+      <Card title="Estatísticas individuais">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Stat label="Peladas jogadas" value={totals.peladas_jogadas} />
           <Stat label="Gols" value={totals.goals} />
@@ -61,15 +61,61 @@ export default function PlayerProfilePage() {
           <Stat label="Ausências" value={totals.absences} />
         </div>
       </Card>
+
+      <Card title="Estatísticas coletivas">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Stat label="Times da pelada" value={collective.bestTeamCount} hint="melhor time do dia" />
+          <Stat label="Vitórias" value={collective.wins} />
+          <Stat label="Empates" value={collective.draws} />
+          <Stat label="Derrotas" value={collective.losses} />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 mt-3">
+          <MateStat
+            label="Com quem mais ganhou"
+            mate={collective.bestMate}
+            value={(m) => `${m.wins} vitórias · ${m.winPct}%`}
+            tone="text-emerald-400"
+          />
+          <MateStat
+            label="Com quem mais perdeu"
+            mate={collective.worstMate}
+            value={(m) => `${m.losses} derrotas · ${m.lossPct}%`}
+            tone="text-red-400"
+          />
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          A porcentagem considera só as partidas em que os dois jogaram no mesmo time.
+        </p>
+      </Card>
     </div>
   );
 }
 
-function Stat({ label, value }) {
+function Stat({ label, value, hint }) {
   return (
     <div className="border border-gulag-border rounded p-3 bg-gulag-surface-2 text-center">
       <p className="text-2xl font-bold text-gulag-cyan">{value}</p>
       <p className="text-xs text-gray-400">{label}</p>
+      {hint && <p className="text-[10px] text-gray-600">{hint}</p>}
+    </div>
+  );
+}
+
+function MateStat({ label, mate, value, tone }) {
+  return (
+    <div className="border border-gulag-border rounded p-3 bg-gulag-surface-2">
+      <p className="text-xs text-gray-400 mb-1">{label}</p>
+      {mate ? (
+        <>
+          <Link to={`/players/${mate.id}`} className={`font-medium underline ${tone}`}>
+            {mate.name}
+          </Link>
+          <p className="text-xs text-gray-500">{value(mate)}</p>
+        </>
+      ) : (
+        <p className="text-sm text-gray-600">Sem dados ainda</p>
+      )}
     </div>
   );
 }

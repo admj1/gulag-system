@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import api from '../../api/client';
 import AtaList from '../../components/AtaList';
 import TeamDraw from '../../components/TeamDraw';
+import { setUnsaved, confirmLeave } from '../../components/unsavedGuard';
 import { useAuth } from '../../context/AuthContext';
 import { inputClass, Button, Card, ScrollArea, EmptyState, bestTeam } from '../../components/ui';
 
@@ -23,6 +24,10 @@ export default function AdminMatchdayDetailPage() {
   const [saving, setSaving] = useState(false);
   const [allDiaristas, setAllDiaristas] = useState([]);
   const [diaristaToAdd, setDiaristaToAdd] = useState('');
+  const [dirty, setDirty] = useState(false);
+
+  // Limpa o aviso ao sair da tela
+  useEffect(() => () => setUnsaved(false), []);
 
   function load() {
     api.get(`/matchdays/${id}`).then(({ data }) => setMatchday(data));
@@ -47,7 +52,10 @@ export default function AdminMatchdayDetailPage() {
 
   const confirmed = confirmations.filter((c) => c.status === 'confirmed');
   const linePlayers = confirmed.filter((c) => c.player_type !== 'goleiro');
-  const goalkeepers = confirmed.filter((c) => c.player_type === 'goleiro');
+  // Goleiros nao costumam confirmar sozinhos: entram na sumula a menos que tenham recusado
+  const goalkeepers = confirmations.filter(
+    (c) => c.player_type === 'goleiro' && c.status !== 'declined'
+  );
   const inAta = new Set(confirmations.map((c) => c.player_id));
   const availableDiaristas = allDiaristas.filter((p) => !inAta.has(p.id));
   // Confirmados que ainda nao estao em nenhum time (usado na ata retroativa)
@@ -141,15 +149,24 @@ export default function AdminMatchdayDetailPage() {
     }
   }
 
+  // Qualquer edicao da sumula liga o aviso de alteracoes nao salvas
+  function markDirty() {
+    setDirty(true);
+    setUnsaved(true, 'A súmula tem alterações não salvas. Sair agora vai descartar tudo.');
+  }
+
   function setPlayerField(playerId, field, value) {
+    markDirty();
     setPlayerStats((prev) => ({ ...prev, [playerId]: { ...prev[playerId], [field]: value } }));
   }
 
   function setGoalkeeperField(playerId, field, value) {
+    markDirty();
     setGoalkeeperStats((prev) => ({ ...prev, [playerId]: { ...prev[playerId], [field]: value } }));
   }
 
   function setTeamResult(teamId, field, value) {
+    markDirty();
     setTeamResults((prev) => ({ ...prev, [teamId]: { ...prev[teamId], [field]: value } }));
   }
 
@@ -196,6 +213,8 @@ export default function AdminMatchdayDetailPage() {
       };
       await api.post(`/matchdays/${id}/summary`, payload);
       toast.success('Súmula salva. Diárias e multas lançadas automaticamente.');
+      setDirty(false);
+      setUnsaved(false);
       load();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao lançar súmula');
@@ -208,7 +227,21 @@ export default function AdminMatchdayDetailPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link to="/admin/matchdays" className="text-sm text-gulag-cyan underline">← voltar</Link>
+      <Link
+        to="/admin/matchdays"
+        onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}
+        className="text-sm text-gulag-cyan underline"
+      >
+        ← voltar
+      </Link>
+
+      {dirty && (
+        <div className="rounded border border-amber-700/60 bg-amber-500/10 p-3">
+          <p className="text-sm text-amber-200">
+            Você tem alterações não salvas na súmula. Se sair desta página agora, elas serão perdidas.
+          </p>
+        </div>
+      )}
 
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -283,41 +316,6 @@ export default function AdminMatchdayDetailPage() {
       </Card>
 
       <h2 className="text-lg font-semibold text-gray-100 mt-2">Súmula</h2>
-
-      {/* Goleiros aparecem sempre antes dos times */}
-      {goalkeepers.length > 0 && (
-        <Card title="Goleiros">
-          <ScrollArea>
-            <table className="w-full text-sm min-w-[620px]">
-              <thead className="text-gray-400 text-left">
-                <tr>
-                  <th className="pb-2">Nome</th><th>Vit.</th><th>Der.</th><th>Emp.</th>
-                  <th>Gols</th><th>Ass.</th><th>Pên. def.</th><th>Amarelo</th><th>Vermelho</th>
-                </tr>
-              </thead>
-              <tbody>
-                {goalkeepers.map((c) => {
-                  const s = goalkeeperStats[c.player_id] || {};
-                  return (
-                    <tr key={c.player_id} className="text-gray-200 border-t border-gulag-border">
-                      <td className="py-1 pr-2 whitespace-nowrap">{c.name}</td>
-                      {['wins', 'losses', 'draws', 'goals', 'assists', 'penalties_saved', 'yellow_cards', 'red_cards'].map((field) => (
-                        <td key={field} className="py-1">
-                          <input
-                            type="number" min="0" inputMode="numeric" className={numberInput}
-                            value={s[field] ?? ''}
-                            onChange={(e) => setGoalkeeperField(c.player_id, field, e.target.value)}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </ScrollArea>
-        </Card>
-      )}
 
       {teams.length === 0 ? (
         <Card><EmptyState>Sorteie os times para lançar a súmula.</EmptyState></Card>
@@ -396,6 +394,41 @@ export default function AdminMatchdayDetailPage() {
             </Card>
           );
         })
+      )}
+
+      {/* Goleiros aparecem depois dos times, como na ata em papel */}
+      {goalkeepers.length > 0 && (
+        <Card title="Goleiros">
+          <ScrollArea>
+            <table className="w-full text-sm min-w-[620px]">
+              <thead className="text-gray-400 text-left">
+                <tr>
+                  <th className="pb-2">Nome</th><th>Vit.</th><th>Der.</th><th>Emp.</th>
+                  <th>Gols</th><th>Ass.</th><th>Pên. def.</th><th>Amarelo</th><th>Vermelho</th>
+                </tr>
+              </thead>
+              <tbody>
+                {goalkeepers.map((c) => {
+                  const s = goalkeeperStats[c.player_id] || {};
+                  return (
+                    <tr key={c.player_id} className="text-gray-200 border-t border-gulag-border">
+                      <td className="py-1 pr-2 whitespace-nowrap">{c.name}</td>
+                      {['wins', 'losses', 'draws', 'goals', 'assists', 'penalties_saved', 'yellow_cards', 'red_cards'].map((field) => (
+                        <td key={field} className="py-1">
+                          <input
+                            type="number" min="0" inputMode="numeric" className={numberInput}
+                            value={s[field] ?? ''}
+                            onChange={(e) => setGoalkeeperField(c.player_id, field, e.target.value)}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </ScrollArea>
+        </Card>
       )}
 
       {teams.length > 0 && (
