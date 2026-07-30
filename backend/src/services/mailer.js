@@ -54,47 +54,88 @@ function formatDeadline(deadline) {
   });
 }
 
-// E-mail simples de proposito: quando é, o botao para confirmar e nada mais.
+// Modelo padrao do convite. O admin pode trocar por outro nas Configuracoes;
+// os {{campos}} sao preenchidos na hora do envio, um e-mail por jogador.
 // Estilo em linha porque cliente de e-mail ignora folha de estilo.
-function inviteTemplate({ name, playerType, dateLabel, timeLabel, deadlineLabel, url }) {
+// Mesmas cores do sistema: fundo escuro, cartao cinza-chumbo e o ciano dos botoes.
+// Layout em tabela com bgcolor porque Outlook ignora background em div.
+const DEFAULT_INVITE_HTML = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0b0d10" style="background:#0b0d10;padding:24px 12px;font-family:Arial,Helvetica,sans-serif">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="520" cellpadding="0" cellspacing="0" border="0" bgcolor="#16191e" style="width:100%;max-width:520px;background:#16191e;border:1px solid #262b33;border-radius:10px">
+        <tr>
+          <td style="padding:24px">
+            {{logo}}
+            <p style="margin:0 0 4px;color:#2dd8d3;font-size:13px;letter-spacing:1px;text-transform:uppercase">Gulag System</p>
+            <h1 style="margin:0 0 16px;font-size:20px;color:#f3f4f6">Nova pelada marcada</h1>
+            <p style="margin:0 0 8px;font-size:15px;color:#e5e7eb">Fala, {{nome}}!</p>
+            <p style="margin:0 0 16px;font-size:15px;color:#e5e7eb">
+              Saiu a lista da pelada de <strong style="color:#ffffff">{{data}}, às {{horario}}</strong>. {{como_entra}}
+            </p>
+            <p style="margin:0 0 24px;color:#9ca3af;font-size:14px">
+              A lista fecha em <strong style="color:#e5e7eb">{{prazo}}</strong>. Quem confirmar e faltar entra na multa.
+            </p>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px">
+              <tr>
+                <td bgcolor="#2dd8d3" style="background:#2dd8d3;border-radius:6px">
+                  <a href="{{link}}" style="display:inline-block;padding:14px 28px;color:#0b0d10;font-size:16px;font-weight:bold;text-decoration:none">
+                    Confirmar presença
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0;color:#6b7280;font-size:12px">
+              Se o botão não abrir, copie este endereço no navegador:<br>
+              <a href="{{link}}" style="color:#2dd8d3">{{link}}</a>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>`;
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Troca {{campo}} pelo valor. Campo desconhecido fica como esta, para um erro
+// de digitacao no modelo aparecer no e-mail em vez de sumir calado.
+function renderTemplate(template, values) {
+  return String(template).replace(
+    /\{\{\s*(\w+)\s*\}\}/g,
+    (original, key) => (key in values ? values[key] : original)
+  );
+}
+
+function inviteTemplate({ name, playerType, dateLabel, timeLabel, deadlineLabel, url, template }) {
   const quando = `${dateLabel}${timeLabel ? `, às ${timeLabel}` : ''}`;
   // Diarista disputa as vagas que sobram, por ordem de inscricao
   const comoEntra = playerType === 'diarista'
     ? 'Diarista entra nas vagas que sobrarem, por ordem de inscrição — quanto antes confirmar, melhor sua posição na fila.'
     : 'Confirme seu nome para garantir a vaga.';
-  const prazo = deadlineLabel
-    ? `<p style="margin:0 0 24px;color:#555;font-size:14px">A lista fecha em <strong>${deadlineLabel}</strong>. Quem confirmar e faltar entra na multa.</p>`
-    : '';
 
   // alt cobre o caso de a imagem nao carregar: o cabecalho continua legivel
   const logo = HAS_LOGO
-    ? `<img src="cid:${LOGO_CID}" alt="Gulag System" width="64" height="64"
-           style="display:block;border:0;border-radius:8px;margin:0 0 12px">`
+    ? `<img src="cid:${LOGO_CID}" alt="Gulag System" width="64" height="64" style="display:block;border:0;border-radius:8px;margin:0 0 12px">`
     : '';
 
-  const html = `
-  <div style="background:#f4f5f7;padding:24px;font-family:Arial,Helvetica,sans-serif">
-    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:24px">
-      ${logo}
-      <p style="margin:0 0 4px;color:#0f766e;font-size:13px;letter-spacing:1px;text-transform:uppercase">Gulag System</p>
-      <h1 style="margin:0 0 16px;font-size:20px;color:#111">Nova pelada marcada</h1>
-      <p style="margin:0 0 8px;font-size:15px;color:#333">Fala, ${name}!</p>
-      <p style="margin:0 0 16px;font-size:15px;color:#333">
-        Saiu a lista da pelada de <strong>${quando}</strong>. ${comoEntra}
-      </p>
-      ${prazo}
-      <p style="margin:0 0 24px">
-        <a href="${url}" style="display:inline-block;background:#0f766e;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:6px;font-size:16px;font-weight:bold">
-          Confirmar presença
-        </a>
-      </p>
-      <p style="margin:0;color:#777;font-size:12px">
-        Se o botão não abrir, copie este endereço no navegador:<br>
-        <a href="${url}" style="color:#0f766e">${url}</a>
-      </p>
-    </div>
-  </div>`;
+  const html = renderTemplate(template || DEFAULT_INVITE_HTML, {
+    logo,
+    nome: escapeHtml(name),
+    data: escapeHtml(dateLabel),
+    horario: escapeHtml(timeLabel || ''),
+    prazo: escapeHtml(deadlineLabel || ''),
+    como_entra: escapeHtml(comoEntra),
+    link: escapeHtml(url),
+  });
 
+  // A versao em texto puro acompanha toda mensagem e nao e editavel:
+  // serve de reserva para cliente antigo ou leitura em modo simples.
   const text = [
     `Fala, ${name}!`,
     '',
@@ -149,6 +190,7 @@ async function sendMatchdayInvites(matchdayId, baseUrl) {
     const { html, text } = inviteTemplate({
       name: player.name, playerType: player.player_type,
       dateLabel, timeLabel, deadlineLabel, url,
+      template: settings?.invite_html,
     });
     try {
       await transport.sendMail({
@@ -171,4 +213,6 @@ async function sendMatchdayInvites(matchdayId, baseUrl) {
   return { configured: true, recipients: recipients.length, sent, failed };
 }
 
-module.exports = { sendMatchdayInvites, inviteRecipients, appBaseUrl, MAIL_CONFIGURED };
+module.exports = {
+  sendMatchdayInvites, inviteRecipients, appBaseUrl, MAIL_CONFIGURED, DEFAULT_INVITE_HTML,
+};

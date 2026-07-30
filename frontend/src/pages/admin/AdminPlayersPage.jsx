@@ -14,6 +14,8 @@ const GROUPS = [
 
 // Sem telefone o jogador nao consegue entrar no sistema
 export const isIncomplete = (player) => !player.phone;
+// Sem e-mail ele entra normalmente, mas nao recebe o aviso da pelada nova
+const hasNoEmail = (player) => !player.email;
 
 export default function AdminPlayersPage() {
   const { player: me } = useAuth();
@@ -21,7 +23,7 @@ export default function AdminPlayersPage() {
   const [players, setPlayers] = useState([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [onlyIncomplete, setOnlyIncomplete] = useState(false);
+  const [missing, setMissing] = useState(null); // null | 'phone' | 'email'
   const [showInactive, setShowInactive] = useState(false);
 
   const load = useCallback(() => {
@@ -34,12 +36,15 @@ export default function AdminPlayersPage() {
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return players.filter((p) => {
-      if (onlyIncomplete && !isIncomplete(p)) return false;
+      if (missing === 'phone' && !isIncomplete(p)) return false;
+      if (missing === 'email' && !hasNoEmail(p)) return false;
       return !term || p.name.toLowerCase().includes(term);
     });
-  }, [players, search, onlyIncomplete]);
+  }, [players, search, missing]);
 
   const incompleteCount = players.filter(isIncomplete).length;
+  const noEmailCount = players.filter(hasNoEmail).length;
+  const toggleMissing = (key) => setMissing((current) => (current === key ? null : key));
 
   return (
     <div className="flex flex-col gap-4">
@@ -70,8 +75,22 @@ export default function AdminPlayersPage() {
             no sistema. Toque no nome para completar.
           </p>
           <div className="mt-2">
-            <Button variant="secondary" onClick={() => setOnlyIncomplete((v) => !v)}>
-              {onlyIncomplete ? 'Mostrar todos' : 'Mostrar só os incompletos'}
+            <Button variant="secondary" onClick={() => toggleMissing('phone')}>
+              {missing === 'phone' ? 'Mostrar todos' : 'Mostrar só os incompletos'}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {noEmailCount > 0 && (
+        <Card>
+          <p className="text-sm text-gray-300">
+            {noEmailCount} cadastro(s) sem e-mail — esses jogadores <strong>não recebem</strong> o
+            aviso de pelada nova. Eles podem preencher em "Meu perfil", ou você cadastra aqui.
+          </p>
+          <div className="mt-2">
+            <Button variant="secondary" onClick={() => toggleMissing('email')}>
+              {missing === 'email' ? 'Mostrar todos' : 'Mostrar só quem está sem e-mail'}
             </Button>
           </div>
         </Card>
