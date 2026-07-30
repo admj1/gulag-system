@@ -16,6 +16,10 @@ router.post('/me/photo', upload.single('photo'), (req, res) => {
 });
 router.get('/:id', controller.getById);
 router.post('/', requireAdmin, controller.create);
+// Admin troca a foto de qualquer jogador (muitos nao mexem no proprio perfil)
+router.post('/:id/photo', requireAdmin, upload.single('photo'), (req, res) => {
+  res.status(201).json({ photo_url: fileUrl(req.file) });
+});
 router.put('/:id', requireAdmin, controller.update);
 router.delete('/:id', requireAdmin, controller.remove);
 router.patch('/:id/block', requireAdmin, controller.setBlock);

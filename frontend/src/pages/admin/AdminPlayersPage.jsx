@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
@@ -296,6 +296,8 @@ function PlayerRow({ player, onChange, isOwner }) {
 }
 
 function PlayerEditor({ player, onChange, isOwner }) {
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef(null);
   const { register, handleSubmit, formState } = useForm({
     defaultValues: {
       first_name: player.first_name || '',
@@ -309,6 +311,27 @@ function PlayerEditor({ player, onChange, isOwner }) {
       password: '',
     },
   });
+
+  // Sobe a imagem e ja grava a URL no cadastro do jogador
+  async function onPickPhoto(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append('photo', file);
+      const { data } = await api.post(`/players/${player.id}/photo`, form);
+      await api.put(`/players/${player.id}`, { photo_url: data.photo_url });
+      toast.success('Foto atualizada');
+      onChange();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao enviar foto');
+    } finally {
+      setUploading(false);
+      event.target.value = '';
+    }
+  }
 
   async function saveProfile(values) {
     try {
@@ -411,6 +434,20 @@ function PlayerEditor({ player, onChange, isOwner }) {
           Informe o telefone (e uma senha inicial) para este jogador conseguir entrar no sistema.
         </p>
       )}
+
+      <div className="sm:col-span-2 flex items-center gap-3">
+        <Avatar src={player.photo_url} name={player.name} />
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/*"
+          onChange={onPickPhoto}
+          className="hidden"
+        />
+        <Button variant="secondary" onClick={() => fileInput.current?.click()} disabled={uploading}>
+          {uploading ? 'Enviando...' : player.photo_url ? 'Trocar foto' : 'Colocar foto'}
+        </Button>
+      </div>
 
       <form onSubmit={handleSubmit(saveProfile)} className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
         <Field label="Nome *">

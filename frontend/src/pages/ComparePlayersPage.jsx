@@ -29,6 +29,8 @@ const ROWS = [
     format: two,
     better: 'high',
   },
+  { label: 'Artilheiro do dia', get: (s) => n(s.totals.top_scorer_days), better: 'high' },
+  { label: 'Garçom do dia', get: (s) => n(s.totals.top_assist_days), better: 'high' },
   { label: 'Vitórias do time', get: (s) => n(s.collective.wins), better: 'high' },
   { label: 'Empates do time', get: (s) => n(s.collective.draws) },
   { label: 'Derrotas do time', get: (s) => n(s.collective.losses), better: 'low' },
@@ -44,9 +46,12 @@ const ROWS = [
   },
   { label: 'Melhor time do dia', get: (s) => n(s.collective.bestTeamCount), better: 'high' },
   { label: 'Amarelos', get: (s) => n(s.totals.yellow_cards), better: 'low' },
-  { label: 'Azuis', get: (s) => n(s.totals.blue_cards), better: 'low' },
-  { label: 'Vermelhos', get: (s) => n(s.totals.red_cards), better: 'low' },
-  { label: 'Ausências', get: (s) => n(s.totals.absences), better: 'low' },
+  {
+    label: 'Azuis + Vermelhos',
+    get: (s) => n(s.totals.blue_cards) + n(s.totals.red_cards),
+    better: 'low',
+  },
+  { label: 'Faltas', get: (s) => n(s.totals.absences), better: 'low' },
 ];
 
 const GK_ROWS = [

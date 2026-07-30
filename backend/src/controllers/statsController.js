@@ -30,9 +30,30 @@ async function playerSummary(id) {
     [id]
   );
 
+  // Artilheiro e garcom do dia: quem fez mais gols / mais assistencias na pelada.
+  // Empate divide o titulo, entao todos os empatados no topo levam o dia.
+  const { rows: titles } = await pool.query(
+    `WITH por_dia AS (
+       SELECT player_id, goals, assists,
+              MAX(goals) OVER (PARTITION BY matchday_id) AS max_goals,
+              MAX(assists) OVER (PARTITION BY matchday_id) AS max_assists
+       FROM player_match_stats
+       WHERE NOT absent
+     )
+     SELECT
+       COUNT(*) FILTER (WHERE goals > 0 AND goals = max_goals)::int AS top_scorer_days,
+       COUNT(*) FILTER (WHERE assists > 0 AND assists = max_assists)::int AS top_assist_days
+     FROM por_dia WHERE player_id = $1`,
+    [id]
+  );
+
   const collective = await collectiveTotals(id);
 
-  return { totals: totals[0], goalkeeperTotals: goalkeeperTotals[0], collective };
+  return {
+    totals: { ...totals[0], ...titles[0] },
+    goalkeeperTotals: goalkeeperTotals[0],
+    collective,
+  };
 }
 
 async function playerProfile(req, res, next) {

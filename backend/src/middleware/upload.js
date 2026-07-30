@@ -36,7 +36,8 @@ const diskStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `player-${req.user.id}-${Date.now()}${ext}`);
+    // O admin envia foto de outro jogador; nesse caso o dono da foto vem na rota
+    cb(null, `player-${req.params.id || req.user.id}-${Date.now()}${ext}`);
   },
 });
 

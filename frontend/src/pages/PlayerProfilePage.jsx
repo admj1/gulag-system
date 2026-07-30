@@ -60,11 +60,19 @@ export default function PlayerProfilePage() {
           <Stat label="Peladas jogadas" value={totals.peladas_jogadas} />
           <Stat label="Gols" value={totals.goals} />
           <Stat label="Assistências" value={totals.assists} />
+          <Stat label="Artilheiro do dia" value={totals.top_scorer_days} hint="vezes" />
+          <Stat label="Garçom do dia" value={totals.top_assist_days} hint="vezes" />
           <Stat label="Amarelos" value={totals.yellow_cards} />
-          <Stat label="Azuis" value={totals.blue_cards} />
-          <Stat label="Vermelhos" value={totals.red_cards} />
-          <Stat label="Ausências" value={totals.absences} />
+          <Stat
+            label="Azuis + Vermelhos"
+            value={Number(totals.blue_cards || 0) + Number(totals.red_cards || 0)}
+          />
+          <Stat label="Faltas" value={totals.absences} />
         </div>
+        <p className="text-xs text-gray-500 mt-2">
+          Artilheiro e garçom do dia contam as peladas em que ninguém fez mais gols / mais
+          assistências — em caso de empate, o dia conta para todos os empatados.
+        </p>
       </Card>
 
       <Card title="Estatísticas coletivas">
