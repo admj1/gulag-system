@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
-import { inputClass, Card, Avatar, EmptyState } from '../components/ui';
+import { inputClass, Button, Card, Avatar, EmptyState } from '../components/ui';
 
 const GROUPS = [
   { key: 'mensalista', label: 'Mensalistas' },
@@ -25,7 +25,12 @@ export default function PlayersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-gray-100">Jogadores</h1>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h1 className="text-2xl font-bold text-gray-100">Jogadores</h1>
+        <Link to="/players/comparar">
+          <Button variant="secondary">⚖ Comparar jogadores</Button>
+        </Link>
+      </div>
 
       <input
         value={search}

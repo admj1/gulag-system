@@ -641,6 +641,217 @@ async function getSummary(req, res, next) {
   }
 }
 
+// Sumula ao vivo: o que um toque na tela pode somar. Jogador de linha e goleiro
+// tem colunas diferentes, como na ata em papel.
+const LIVE_LINE_STATS = ['goals', 'assists', 'yellow_cards', 'blue_cards', 'red_cards'];
+const LIVE_GK_STATS = ['goals', 'assists', 'penalties_saved', 'yellow_cards', 'red_cards',
+  'wins', 'draws', 'losses'];
+const LIVE_TEAM_STATS = ['wins', 'draws', 'losses'];
+
+// Admin: tudo que a tela de sumula ao vivo precisa numa unica requisicao,
+// porque no campo a conexao costuma ser ruim.
+async function getLive(req, res, next) {
+  try {
+    const { rows: matchdayRows } = await pool.query(
+      'SELECT * FROM matchdays WHERE id = $1', [req.params.id]
+    );
+    if (!matchdayRows[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
+
+    const { rows: teams } = await pool.query(
+      'SELECT id, name, wins, draws, losses FROM teams WHERE matchday_id = $1 ORDER BY name',
+      [req.params.id]
+    );
+    const { rows: teamPlayers } = await pool.query(
+      `SELECT tp.team_id, p.id, ${displayNameSql('p')} AS name
+       FROM team_players tp
+       JOIN teams t ON t.id = tp.team_id
+       JOIN players p ON p.id = tp.player_id
+       WHERE t.matchday_id = $1
+       ORDER BY ${displayNameSql('p')}`,
+      [req.params.id]
+    );
+    // Goleiros nao costumam confirmar sozinhos: entram a menos que tenham recusado
+    const { rows: goalkeepers } = await pool.query(
+      `SELECT p.id, ${displayNameSql('p')} AS name
+       FROM confirmations c
+       JOIN players p ON p.id = c.player_id
+       WHERE c.matchday_id = $1 AND p.player_type = 'goleiro' AND c.status <> 'declined'
+       ORDER BY ${displayNameSql('p')}`,
+      [req.params.id]
+    );
+    const { rows: playerStats } = await pool.query(
+      'SELECT * FROM player_match_stats WHERE matchday_id = $1', [req.params.id]
+    );
+    const { rows: goalkeeperStats } = await pool.query(
+      'SELECT * FROM goalkeeper_match_stats WHERE matchday_id = $1', [req.params.id]
+    );
+
+    res.json({
+      matchday: matchdayRows[0],
+      teams: teams.map((t) => ({ ...t, players: teamPlayers.filter((p) => p.team_id === t.id) })),
+      goalkeepers,
+      playerStats,
+      goalkeeperStats,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Grava o toque no historico. Devolve false quando o client_id ja tinha subido
+// antes, para o mesmo gol nao ser somado duas vezes no reenvio da fila.
+async function recordEvent(client, { matchdayId, playerId = null, teamId = null, stat, delta, clientId, userId }) {
+  const { rows } = await client.query(
+    `INSERT INTO match_events (matchday_id, player_id, team_id, stat, delta, client_id, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (client_id) DO NOTHING
+     RETURNING id`,
+    [matchdayId, playerId, teamId, stat, delta, clientId, userId]
+  );
+  return !!rows[0];
+}
+
+// Admin: recebe a fila de toques do celular. Cada evento traz um client_id gerado
+// no aparelho; o repetido e ignorado, então reenviar a fila apos perder o sinal e
+// seguro. Sao somas de +1/-1 (o "desfazer" manda -1), logo a ordem nao importa.
+// O evento aponta para um jogador (gol, assistencia, cartao) ou para um time
+// (vitoria/empate/derrota de cada partida do rodizio).
+async function pushEvents(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const { events } = req.body;
+    if (!Array.isArray(events)) {
+      return res.status(400).json({ error: 'Lista de lançamentos inválida' });
+    }
+    if (events.length > 200) {
+      return res.status(400).json({ error: 'Muitos lançamentos de uma vez' });
+    }
+
+    const { rows: matchdayRows } = await client.query(
+      'SELECT id FROM matchdays WHERE id = $1', [req.params.id]
+    );
+    if (!matchdayRows[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
+
+    await client.query('BEGIN');
+    let applied = 0;
+    let ignored = 0;
+
+    for (const event of events) {
+      const clientId = String(event.client_id || '');
+      const delta = Number(event.delta);
+      if (!clientId || clientId.length > 60 || (delta !== 1 && delta !== -1)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Lançamento inválido' });
+      }
+
+      // V/E/D do time em cada partida do rodizio
+      if (event.team_id != null) {
+        const teamId = Number(event.team_id);
+        if (!Number.isInteger(teamId) || !LIVE_TEAM_STATS.includes(event.stat)) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Resultado de time inválido' });
+        }
+
+        const { rows: teamRows } = await client.query(
+          'SELECT id FROM teams WHERE id = $1 AND matchday_id = $2', [teamId, req.params.id]
+        );
+        if (!teamRows[0]) {
+          ignored += 1; // time apagado/refeito depois do lancamento: nao trava a fila
+          continue;
+        }
+
+        const registered = await recordEvent(client, {
+          matchdayId: req.params.id, teamId, stat: event.stat, delta, clientId, userId: req.user.id,
+        });
+        if (!registered) {
+          ignored += 1;
+          continue;
+        }
+
+        await client.query(
+          `UPDATE teams SET ${event.stat} = GREATEST(0, ${event.stat} + $1) WHERE id = $2`,
+          [delta, teamId]
+        );
+        applied += 1;
+        continue;
+      }
+
+      const playerId = Number(event.player_id);
+      if (!Number.isInteger(playerId)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Lançamento inválido' });
+      }
+
+      const { rows: playerRows } = await client.query(
+        'SELECT player_type FROM players WHERE id = $1', [playerId]
+      );
+      if (!playerRows[0]) {
+        ignored += 1; // jogador apagado depois do lancamento: nao trava a fila
+        continue;
+      }
+
+      const isGoalkeeper = playerRows[0].player_type === 'goleiro';
+      const allowed = isGoalkeeper ? LIVE_GK_STATS : LIVE_LINE_STATS;
+      if (!allowed.includes(event.stat)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Tipo de lançamento inválido para este jogador' });
+      }
+
+      const registered = await recordEvent(client, {
+        matchdayId: req.params.id, playerId, stat: event.stat, delta, clientId, userId: req.user.id,
+      });
+      if (!registered) {
+        ignored += 1; // esse toque ja tinha subido numa tentativa anterior
+        continue;
+      }
+
+      if (isGoalkeeper) {
+        await client.query(
+          `INSERT INTO goalkeeper_match_stats (matchday_id, player_id, ${event.stat})
+           VALUES ($1, $2, GREATEST(0, $3))
+           ON CONFLICT (matchday_id, player_id) DO UPDATE SET
+             ${event.stat} = GREATEST(0, goalkeeper_match_stats.${event.stat} + $3)`,
+          [req.params.id, playerId, delta]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO player_match_stats (matchday_id, player_id, team_id, ${event.stat})
+           VALUES ($1, $2,
+             (SELECT tp.team_id FROM team_players tp
+              JOIN teams t ON t.id = tp.team_id
+              WHERE t.matchday_id = $1 AND tp.player_id = $2 LIMIT 1),
+             GREATEST(0, $3))
+           ON CONFLICT (matchday_id, player_id) DO UPDATE SET
+             ${event.stat} = GREATEST(0, player_match_stats.${event.stat} + $3),
+             team_id = COALESCE(player_match_stats.team_id, EXCLUDED.team_id)`,
+          [req.params.id, playerId, delta]
+        );
+      }
+      applied += 1;
+    }
+
+    await client.query('COMMIT');
+
+    // Devolve os totais do servidor para o celular se acertar com a realidade
+    const { rows: playerStats } = await client.query(
+      'SELECT * FROM player_match_stats WHERE matchday_id = $1', [req.params.id]
+    );
+    const { rows: goalkeeperStats } = await client.query(
+      'SELECT * FROM goalkeeper_match_stats WHERE matchday_id = $1', [req.params.id]
+    );
+    const { rows: teams } = await client.query(
+      'SELECT id, name, wins, draws, losses FROM teams WHERE matchday_id = $1 ORDER BY name',
+      [req.params.id]
+    );
+    res.json({ applied, ignored, playerStats, goalkeeperStats, teams });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+}
+
 // Admin: lançamento da súmula pós-jogo (gera multas e diarias automaticamente)
 async function submitSummary(req, res, next) {
   const client = await pool.connect();
@@ -732,5 +943,5 @@ module.exports = {
   create, list, getById, getConfirmations, confirm, closeList, closeMatchday,
   drawTeams, submitSummary, getSummary, getTeams, moveTeamPlayer, rosterPreview, createFromRoster, remove,
   setConfirmation, removeConfirmation, invitePlayer, cancelOwnConfirmation,
-  declineOwn, createRetroactive,
+  declineOwn, createRetroactive, getLive, pushEvents,
 };

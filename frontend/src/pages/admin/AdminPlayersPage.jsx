@@ -77,6 +77,8 @@ export default function AdminPlayersPage() {
         </Card>
       )}
 
+      <StarSuggestions onApplied={load} />
+
       {showForm && (
         <NewPlayerModal
           onClose={() => setShowForm(false)}
@@ -101,6 +103,100 @@ export default function AdminPlayersPage() {
         );
       })}
     </div>
+  );
+}
+
+// O sistema so recomenda: nenhuma estrela muda sozinha, o admin aplica uma a uma.
+function StarSuggestions({ onApplied }) {
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState([]);
+  const [applying, setApplying] = useState(null);
+
+  const load = useCallback(() => {
+    api.get('/stats/star-suggestions')
+      .then(({ data: result }) => setData(result))
+      .catch(() => setData({ suggestions: [] }));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function apply(suggestion) {
+    setApplying(suggestion.id);
+    try {
+      await api.put(`/players/${suggestion.id}`, { stars: suggestion.suggested_stars });
+      toast.success(`${suggestion.name} agora tem ${suggestion.suggested_stars}★`);
+      setDismissed((list) => [...list, suggestion.id]);
+      onApplied();
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao alterar as estrelas');
+    } finally {
+      setApplying(null);
+    }
+  }
+
+  if (!data) return null;
+
+  const pending = data.suggestions.filter((s) => !dismissed.includes(s.id));
+  if (pending.length === 0) return null;
+
+  return (
+    <Card
+      className="border-gulag-cyan/40"
+      title={`Sugestões de estrelas (${pending.length})`}
+      action={
+        <Button variant="secondary" onClick={() => setOpen((v) => !v)}>
+          {open ? 'Ocultar' : 'Ver sugestões'}
+        </Button>
+      }
+    >
+      <p className="text-xs text-gray-500">
+        Baseado nas últimas {data.window} peladas de cada um: participação em gols e aproveitamento
+        do time, comparados com o resto do elenco. Nada muda sozinho — você aplica se concordar.
+      </p>
+
+      {open && (
+        <ul className="flex flex-col gap-2 mt-3">
+          {pending.map((s) => (
+            <li
+              key={s.id}
+              className="border border-gulag-border rounded p-3 flex flex-wrap items-center justify-between gap-2"
+            >
+              <div className="min-w-0">
+                <p className="text-gray-100 flex items-center gap-2 flex-wrap">
+                  <span className="truncate">{s.name}</span>
+                  <span className="text-sm text-gray-400">
+                    {s.current_stars}★
+                    <span className={s.direction === 'up' ? 'text-emerald-400' : 'text-amber-400'}>
+                      {' '}→ {s.suggested_stars}★
+                    </span>
+                  </span>
+                </p>
+                <p className="text-xs text-gray-500">
+                  {s.contribution} gol+assist. por pelada (média do elenco {data.averageContribution})
+                  {s.win_pct !== null && ` · ${s.win_pct}% de aproveitamento`}
+                  {' · '}
+                  {s.peladas} peladas desde{' '}
+                  {new Date(`${s.desde}T12:00:00`).toLocaleDateString('pt-BR')}
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button onClick={() => apply(s)} disabled={applying === s.id}>
+                  {applying === s.id ? 'Aplicando...' : 'Aplicar'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setDismissed((list) => [...list, s.id])}
+                >
+                  Ignorar
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 

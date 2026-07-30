@@ -12,6 +12,7 @@ const TITLES = {
 export default function AdminLayout() {
   const { pathname } = useLocation();
   const title = TITLES[pathname]
+    || (pathname.endsWith('/ao-vivo') ? 'Súmula ao vivo' : null)
     || (pathname.startsWith('/admin/matchdays/') ? 'Gerenciamento de ATAS' : 'Administração');
 
   return (

@@ -19,7 +19,12 @@ export default function PlayerProfilePage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link to="/players" className="text-sm text-gulag-cyan underline">← voltar</Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link to="/players" className="text-sm text-gulag-cyan underline">← voltar</Link>
+        <Link to={`/players/comparar?a=${player.id}`} className="text-sm text-gulag-cyan underline">
+          ⚖ comparar com outro
+        </Link>
+      </div>
 
       <div className="flex items-center gap-4">
         <Avatar src={player.photo_url} name={player.name} size="lg" />

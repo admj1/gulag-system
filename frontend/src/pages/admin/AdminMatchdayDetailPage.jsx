@@ -267,6 +267,14 @@ export default function AdminMatchdayDetailPage() {
             {matchday.status === 'open' && (
               <Button variant="secondary" onClick={closeList}>Fechar lista</Button>
             )}
+            {teams.length > 0 && (
+              <Link
+                to={`/admin/matchdays/${id}/ao-vivo`}
+                onClick={(e) => { if (!confirmLeave()) e.preventDefault(); }}
+              >
+                <Button>⚡ Súmula ao vivo</Button>
+              </Link>
+            )}
           </div>
         </div>
       </Card>
@@ -316,6 +324,10 @@ export default function AdminMatchdayDetailPage() {
       </Card>
 
       <h2 className="text-lg font-semibold text-gray-100 mt-2">Súmula</h2>
+      <p className="text-xs text-gray-500 -mt-3">
+        Gols, assistências e cartões lançados na tela ao vivo já vêm preenchidos aqui.
+        Complete as vitórias/empates/derrotas de cada time e salve para gerar diárias e multas.
+      </p>
 
       {teams.length === 0 ? (
         <Card><EmptyState>Sorteie os times para lançar a súmula.</EmptyState></Card>
