@@ -22,8 +22,10 @@ export default function AdminMatchdayDetailPage() {
   const [goalkeeperStats, setGoalkeeperStats] = useState({});
   const [teamResults, setTeamResults] = useState({});
   const [saving, setSaving] = useState(false);
-  const [allDiaristas, setAllDiaristas] = useState([]);
-  const [diaristaToAdd, setDiaristaToAdd] = useState('');
+  const [allPlayers, setAllPlayers] = useState([]);
+  const [playerToAdd, setPlayerToAdd] = useState('');
+  const [newPlayer, setNewPlayer] = useState({ first_name: '', last_name: '', player_type: 'diarista' });
+  const [creating, setCreating] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [notifying, setNotifying] = useState(null); // null | 'test' | 'all'
 
@@ -34,7 +36,7 @@ export default function AdminMatchdayDetailPage() {
     api.get(`/matchdays/${id}`).then(({ data }) => setMatchday(data));
     api.get(`/matchdays/${id}/confirmations`).then(({ data }) => setConfirmations(data));
     api.get(`/matchdays/${id}/teams`).then(({ data }) => setTeams(data));
-    api.get('/players', { params: { type: 'diarista' } }).then(({ data }) => setAllDiaristas(data));
+    api.get('/players').then(({ data }) => setAllPlayers(data));
     api.get(`/matchdays/${id}/summary`).then(({ data }) => {
       setPlayerStats(Object.fromEntries(data.playerStats.map((s) => [s.player_id, s])));
       setGoalkeeperStats(Object.fromEntries(data.goalkeeperStats.map((s) => [s.player_id, s])));
@@ -58,7 +60,9 @@ export default function AdminMatchdayDetailPage() {
     (c) => c.player_type === 'goleiro' && c.status !== 'declined'
   );
   const inAta = new Set(confirmations.map((c) => c.player_id));
-  const availableDiaristas = allDiaristas.filter((p) => !inAta.has(p.id));
+  // Qualquer jogador fora da ata pode ser incluido — goleiro que apareceu de
+  // ultima hora, diarista, ou mensalista que ficou de fora numa ata retroativa
+  const availablePlayers = allPlayers.filter((p) => !inAta.has(p.id));
   // Confirmados que ainda nao estao em nenhum time (usado na ata retroativa)
   const unassigned = linePlayers
     .filter((c) => !playerTeamId[c.player_id])
@@ -89,14 +93,37 @@ export default function AdminMatchdayDetailPage() {
     }
   }
 
-  async function addDiarista() {
+  async function addPlayer() {
     try {
-      await api.patch(`/matchdays/${id}/confirmations/${diaristaToAdd}`, { status: 'confirmed' });
-      setDiaristaToAdd('');
-      toast.success('Diarista incluído na ata');
+      await api.patch(`/matchdays/${id}/confirmations/${playerToAdd}`, { status: 'confirmed' });
+      setPlayerToAdd('');
+      toast.success('Jogador incluído na ata');
       load();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao incluir diarista');
+      toast.error(err.response?.data?.error || 'Erro ao incluir jogador');
+    }
+  }
+
+  // Goleiro avulso (ou diarista) que jogou e nunca foi cadastrado: cria o
+  // cadastro com o nome e ja marca presenca nesta pelada.
+  async function createAndAdd() {
+    const firstName = newPlayer.first_name.trim();
+    if (firstName.length < 2) return toast.error('Informe o nome de quem jogou');
+    setCreating(true);
+    try {
+      const { data } = await api.post('/players', {
+        first_name: firstName,
+        last_name: newPlayer.last_name.trim(),
+        player_type: newPlayer.player_type,
+      });
+      await api.patch(`/matchdays/${id}/confirmations/${data.id}`, { status: 'confirmed' });
+      setNewPlayer({ first_name: '', last_name: '', player_type: newPlayer.player_type });
+      toast.success(`${data.name} cadastrado e incluído na ata`);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao cadastrar jogador');
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -339,19 +366,52 @@ export default function AdminMatchdayDetailPage() {
         currentPlayerId={player?.id}
       />
 
-      <Card
-        title="Incluir diarista"
-      >
+      <Card title="Incluir na ata">
         <div className="flex gap-2 flex-wrap">
           <select
-            value={diaristaToAdd}
-            onChange={(e) => setDiaristaToAdd(e.target.value)}
+            value={playerToAdd}
+            onChange={(e) => setPlayerToAdd(e.target.value)}
             className={`${inputClass} flex-1 min-w-[160px]`}
           >
-            <option value="">Selecione um diarista...</option>
-            {availableDiaristas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            <option value="">Selecione um jogador...</option>
+            {availablePlayers.map((p) => (
+              <option key={p.id} value={p.id}>{p.name} ({p.player_type})</option>
+            ))}
           </select>
-          <Button variant="secondary" onClick={addDiarista} disabled={!diaristaToAdd}>Incluir</Button>
+          <Button variant="secondary" onClick={addPlayer} disabled={!playerToAdd}>Incluir</Button>
+        </div>
+
+        <div className="border-t border-gulag-border mt-3 pt-3">
+          <p className="text-sm text-gray-400">Jogou e não está cadastrado?</p>
+          <p className="text-xs text-gray-500 mb-2">
+            Cadastra na hora e já entra como presente nesta pelada. Telefone e senha ficam para
+            depois, em Jogadores.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              value={newPlayer.first_name}
+              onChange={(e) => setNewPlayer((p) => ({ ...p, first_name: e.target.value }))}
+              placeholder="Nome"
+              className={inputClass}
+            />
+            <input
+              value={newPlayer.last_name}
+              onChange={(e) => setNewPlayer((p) => ({ ...p, last_name: e.target.value }))}
+              placeholder="Sobrenome (opcional)"
+              className={inputClass}
+            />
+            <select
+              value={newPlayer.player_type}
+              onChange={(e) => setNewPlayer((p) => ({ ...p, player_type: e.target.value }))}
+              className={inputClass}
+            >
+              <option value="diarista">Diarista</option>
+              <option value="goleiro">Goleiro</option>
+            </select>
+            <Button variant="secondary" onClick={createAndAdd} disabled={creating}>
+              {creating ? 'Cadastrando...' : '+ Cadastrar e incluir'}
+            </Button>
+          </div>
         </div>
       </Card>
 
