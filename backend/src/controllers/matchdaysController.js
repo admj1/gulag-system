@@ -135,7 +135,8 @@ async function notifyMatchday(req, res, next) {
 
     if (!result.configured) {
       return res.status(503).json({
-        error: 'Envio de e-mail não configurado no servidor (SMTP_HOST, SMTP_USER, SMTP_PASS)',
+        error: 'Envio de e-mail não configurado no servidor'
+          + ' (BREVO_API_KEY + MAIL_FROM, ou SMTP_HOST/SMTP_USER/SMTP_PASS)',
       });
     }
     if (test && result.recipients === 0) {

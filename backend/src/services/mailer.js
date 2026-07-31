@@ -4,21 +4,26 @@ const nodemailer = require('nodemailer');
 const pool = require('../config/db');
 const { displayNameSql, getSettings } = require('../config/settings');
 
-// O logo vai embutido na mensagem (cid), e nao por link: cliente de e-mail
-// costuma bloquear imagem de fora, e ai o cabecalho apareceria quebrado.
+// No SMTP o logo vai embutido na mensagem (cid), porque cliente de e-mail
+// costuma bloquear imagem de fora. Pela API o anexo inline nao existe do mesmo
+// jeito, entao ali ele vira link para o proprio sistema.
 const LOGO_PATH = path.join(__dirname, '..', '..', '..', 'frontend', 'public', 'logo.jpeg');
 const LOGO_CID = 'gulag-logo';
 const HAS_LOGO = fs.existsSync(LOGO_PATH);
 
-// Sem SMTP configurado o sistema continua funcionando: o aviso simplesmente nao
-// sai (mesmo criterio das fotos, que caem para o disco quando falta Cloudinary).
-const MAIL_CONFIGURED = !!(
-  process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
-);
+// Hospedagem costuma bloquear as portas de SMTP para conter spam — no Railway a
+// conexao com o Gmail da timeout. Por isso o caminho preferido e a API HTTPS do
+// Brevo (porta 443, nunca bloqueada); o SMTP fica para quem puder usar.
+// Sem nenhum dos dois o sistema continua funcionando: o aviso so nao sai.
+const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
+const HAS_SMTP = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+// A API exige remetente proprio: nao ha login de e-mail de onde deduzi-lo
+const HAS_BREVO = !!(BREVO_API_KEY && process.env.MAIL_FROM);
+const MAIL_CONFIGURED = HAS_BREVO || HAS_SMTP;
 
 let transporter = null;
 function getTransporter() {
-  if (!MAIL_CONFIGURED) return null;
+  if (!HAS_SMTP) return null;
   if (!transporter) {
     const port = Number(process.env.SMTP_PORT) || 587;
     transporter = nodemailer.createTransport({
@@ -34,6 +39,45 @@ function getTransporter() {
     });
   }
   return transporter;
+}
+
+// "Gulag System <x@y.com>" ou so o endereco
+function parseSender(from) {
+  const match = /^\s*(.*?)\s*<(.+)>\s*$/.exec(String(from || ''));
+  return match ? { name: match[1] || undefined, email: match[2] } : { email: String(from || '') };
+}
+
+async function sendViaBrevo({ from, to, subject, html, text }) {
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': BREVO_API_KEY,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify({
+      sender: parseSender(from),
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text,
+    }),
+  });
+
+  if (!response.ok) {
+    // A resposta traz o motivo (remetente nao validado, chave errada, cota...)
+    const detail = (await response.text()).slice(0, 200);
+    throw new Error(`Brevo respondeu ${response.status}: ${detail}`);
+  }
+}
+
+// Entrega uma mensagem pelo caminho disponivel
+async function deliver(message) {
+  if (HAS_BREVO) return sendViaBrevo(message);
+  return getTransporter().sendMail({
+    ...message,
+    attachments: HAS_LOGO ? [{ filename: 'logo.jpeg', path: LOGO_PATH, cid: LOGO_CID }] : [],
+  });
 }
 
 // Link do aviso. Em producao vale o APP_URL; sem ele, usa o proprio endereco
@@ -119,7 +163,9 @@ function renderTemplate(template, values) {
   );
 }
 
-function inviteTemplate({ name, playerType, dateLabel, timeLabel, deadlineLabel, url, template }) {
+function inviteTemplate({
+  name, playerType, dateLabel, timeLabel, deadlineLabel, url, template, logoSrc,
+}) {
   const quando = `${dateLabel}${timeLabel ? `, às ${timeLabel}` : ''}`;
   // Diarista disputa as vagas que sobram, por ordem de inscricao
   const comoEntra = playerType === 'diarista'
@@ -127,8 +173,8 @@ function inviteTemplate({ name, playerType, dateLabel, timeLabel, deadlineLabel,
     : 'Confirme seu nome para garantir a vaga.';
 
   // alt cobre o caso de a imagem nao carregar: o cabecalho continua legivel
-  const logo = HAS_LOGO
-    ? `<img src="cid:${LOGO_CID}" alt="Gulag System" width="64" height="64" style="display:block;border:0;border-radius:8px;margin:0 0 12px">`
+  const logo = logoSrc
+    ? `<img src="${logoSrc}" alt="Gulag System" width="64" height="64" style="display:block;border:0;border-radius:8px;margin:0 0 12px">`
     : '';
 
   const html = renderTemplate(template || DEFAULT_INVITE_HTML, {
@@ -187,8 +233,7 @@ async function sendMatchdayInvites(matchdayId, baseUrl, { onlyPlayerId = null } 
     ? elenco.filter((p) => p.id === Number(onlyPlayerId))
     : elenco;
 
-  const transport = getTransporter();
-  if (!transport) {
+  if (!MAIL_CONFIGURED) {
     return {
       configured: false, recipients: recipients.length, sent: 0, failed: 0, elenco: elenco.length,
     };
@@ -200,6 +245,10 @@ async function sendMatchdayInvites(matchdayId, baseUrl, { onlyPlayerId = null } 
   const deadlineLabel = formatDeadline(matchday.confirmation_deadline);
   const url = `${baseUrl}/peladas/${matchdayId}`;
   const from = process.env.MAIL_FROM || process.env.SMTP_USER;
+  // Pela API o logo vem do proprio sistema; pelo SMTP vai embutido na mensagem
+  const logoSrc = HAS_BREVO
+    ? `${baseUrl}/logo.jpeg`
+    : (HAS_LOGO ? `cid:${LOGO_CID}` : null);
 
   let sent = 0;
   let failed = 0;
@@ -207,19 +256,16 @@ async function sendMatchdayInvites(matchdayId, baseUrl, { onlyPlayerId = null } 
   for (const player of recipients) {
     const { html, text } = inviteTemplate({
       name: player.name, playerType: player.player_type,
-      dateLabel, timeLabel, deadlineLabel, url,
+      dateLabel, timeLabel, deadlineLabel, url, logoSrc,
       template: settings?.invite_html,
     });
     try {
-      await transport.sendMail({
+      await deliver({
         from,
         to: player.email,
         subject: `Pelada ${dateLabel} — confirme sua presença`,
         html,
         text,
-        attachments: HAS_LOGO
-          ? [{ filename: 'logo.jpeg', path: LOGO_PATH, cid: LOGO_CID }]
-          : [],
       });
       sent += 1;
     } catch (err) {
