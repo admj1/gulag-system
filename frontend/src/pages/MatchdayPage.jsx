@@ -151,17 +151,25 @@ export default function MatchdayPage() {
               </ul>
             ) : (
               <ScrollArea>
-                <table className="w-full text-sm min-w-[380px]">
+                {/* Largura fixa das colunas para os times ficarem alinhados entre si:
+                    no automatico, cada tabela se ajusta ao nome mais longo dela */}
+                <table className="w-full table-fixed text-sm min-w-[420px]">
                   <thead className="text-gray-400 text-left">
-                    <tr><th>Nome</th><th>Gols</th><th>Ass.</th><th>Cartões</th><th>Faltou</th></tr>
+                    <tr>
+                      <th>Nome</th>
+                      <th className="w-16">Gols</th>
+                      <th className="w-16">Ass.</th>
+                      <th className="w-20">Cartões</th>
+                      <th className="w-16">Faltou</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {stats.map((s) => (
                       <tr key={s.id} className="text-gray-200 border-t border-gulag-border">
-                        <td className="py-1">{nameById[s.player_id] || `#${s.player_id}`}</td>
-                        <td>{s.goals}</td>
-                        <td>{s.assists}</td>
-                        <td>{s.yellow_cards + s.blue_cards + s.red_cards}</td>
+                        <td className="py-1 pr-2 truncate">{nameById[s.player_id] || `#${s.player_id}`}</td>
+                        <td className="tabular-nums">{s.goals}</td>
+                        <td className="tabular-nums">{s.assists}</td>
+                        <td className="tabular-nums">{s.yellow_cards + s.blue_cards + s.red_cards}</td>
                         <td>{s.absent ? 'sim' : '-'}</td>
                       </tr>
                     ))}
@@ -176,20 +184,28 @@ export default function MatchdayPage() {
       {summary.goalkeeperStats.length > 0 && (
         <Card title="Goleiros">
           <ScrollArea>
-            <table className="w-full text-sm min-w-[420px]">
+            <table className="w-full table-fixed text-sm min-w-[460px]">
               <thead className="text-gray-400 text-left">
-                <tr><th>Nome</th><th>V</th><th>D</th><th>E</th><th>Gols</th><th>Ass.</th><th>Pên. def.</th></tr>
+                <tr>
+                  <th>Nome</th>
+                  <th className="w-12">V</th>
+                  <th className="w-12">D</th>
+                  <th className="w-12">E</th>
+                  <th className="w-16">Gols</th>
+                  <th className="w-16">Ass.</th>
+                  <th className="w-24">Pên. def.</th>
+                </tr>
               </thead>
               <tbody>
                 {summary.goalkeeperStats.map((s) => (
                   <tr key={s.id} className="text-gray-200 border-t border-gulag-border">
-                    <td className="py-1">{nameById[s.player_id] || `#${s.player_id}`}</td>
-                    <td>{s.wins}</td>
-                    <td>{s.losses}</td>
-                    <td>{s.draws}</td>
-                    <td>{s.goals}</td>
-                    <td>{s.assists}</td>
-                    <td>{s.penalties_saved}</td>
+                    <td className="py-1 pr-2 truncate">{nameById[s.player_id] || `#${s.player_id}`}</td>
+                    <td className="tabular-nums">{s.wins}</td>
+                    <td className="tabular-nums">{s.losses}</td>
+                    <td className="tabular-nums">{s.draws}</td>
+                    <td className="tabular-nums">{s.goals}</td>
+                    <td className="tabular-nums">{s.assists}</td>
+                    <td className="tabular-nums">{s.penalties_saved}</td>
                   </tr>
                 ))}
               </tbody>

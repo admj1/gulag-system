@@ -475,11 +475,17 @@ export default function AdminMatchdayDetailPage() {
               </div>
 
               <ScrollArea>
-                <table className="w-full text-sm min-w-[520px]">
+                {/* Coluna fixa para os times ficarem alinhados entre si */}
+                <table className="w-full table-fixed text-sm min-w-[560px]">
                   <thead className="text-gray-400 text-left">
                     <tr>
-                      <th className="pb-2">Nome</th><th>Gols</th><th>Ass.</th>
-                      <th>Amarelo</th><th>Azul</th><th>Vermelho</th><th>Faltou</th>
+                      <th className="pb-2">Nome</th>
+                      <th className="w-16">Gols</th>
+                      <th className="w-16">Ass.</th>
+                      <th className="w-20">Amarelo</th>
+                      <th className="w-16">Azul</th>
+                      <th className="w-20">Vermelho</th>
+                      <th className="w-16">Faltou</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -487,7 +493,7 @@ export default function AdminMatchdayDetailPage() {
                       const s = playerStats[c.player_id] || {};
                       return (
                         <tr key={c.player_id} className="text-gray-200 border-t border-gulag-border">
-                          <td className="py-1 pr-2 whitespace-nowrap">{c.name}</td>
+                          <td className="py-1 pr-2 truncate" title={c.name}>{c.name}</td>
                           {['goals', 'assists', 'yellow_cards', 'blue_cards', 'red_cards'].map((field) => (
                             <td key={field} className="py-1">
                               <input
@@ -520,11 +526,18 @@ export default function AdminMatchdayDetailPage() {
       {goalkeepers.length > 0 && (
         <Card title="Goleiros">
           <ScrollArea>
-            <table className="w-full text-sm min-w-[620px]">
+            <table className="w-full table-fixed text-sm min-w-[660px]">
               <thead className="text-gray-400 text-left">
                 <tr>
-                  <th className="pb-2">Nome</th><th>Vit.</th><th>Der.</th><th>Emp.</th>
-                  <th>Gols</th><th>Ass.</th><th>Pên. def.</th><th>Amarelo</th><th>Vermelho</th>
+                  <th className="pb-2">Nome</th>
+                  <th className="w-16">Vit.</th>
+                  <th className="w-16">Der.</th>
+                  <th className="w-16">Emp.</th>
+                  <th className="w-16">Gols</th>
+                  <th className="w-16">Ass.</th>
+                  <th className="w-20">Pên. def.</th>
+                  <th className="w-20">Amarelo</th>
+                  <th className="w-20">Vermelho</th>
                 </tr>
               </thead>
               <tbody>
@@ -532,7 +545,7 @@ export default function AdminMatchdayDetailPage() {
                   const s = goalkeeperStats[c.player_id] || {};
                   return (
                     <tr key={c.player_id} className="text-gray-200 border-t border-gulag-border">
-                      <td className="py-1 pr-2 whitespace-nowrap">{c.name}</td>
+                      <td className="py-1 pr-2 truncate" title={c.name}>{c.name}</td>
                       {['wins', 'losses', 'draws', 'goals', 'assists', 'penalties_saved', 'yellow_cards', 'red_cards'].map((field) => (
                         <td key={field} className="py-1">
                           <input

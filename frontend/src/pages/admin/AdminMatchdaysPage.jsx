@@ -3,11 +3,17 @@ import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
+import MatchdayAccordion from '../../components/MatchdayAccordion';
 import Modal from '../../components/Modal';
 import PlayerPicker from '../../components/PlayerPicker';
 import { inputClass, Button, Card, Field, EmptyState } from '../../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
+
+const formatDate = (date) =>
+  new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', {
+    weekday: 'short', day: '2-digit', month: '2-digit',
+  });
 
 export default function AdminMatchdaysPage() {
   const [matchdays, setMatchdays] = useState([]);
@@ -23,6 +29,9 @@ export default function AdminMatchdaysPage() {
   }
 
   useEffect(load, []);
+
+  const openMatchday = matchdays.find((m) => m.status === 'open');
+  const previous = matchdays.filter((m) => m.status !== 'open');
 
   async function removeSeason(season) {
     if (!window.confirm(`Apagar a temporada "${season.name}"?`)) return;
@@ -62,26 +71,33 @@ export default function AdminMatchdaysPage() {
         {matchdays.length === 0 ? (
           <EmptyState>Nenhuma pelada lançada.</EmptyState>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {matchdays.map((m) => (
-              <li key={m.id} className="border border-gulag-border rounded p-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-col gap-3">
+            {/* A pelada com lista aberta e a que esta em uso: fica fora do agrupamento */}
+            {openMatchday && (
+              <div className="border border-gulag-cyan/50 rounded p-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-gray-100">
-                    {new Date(`${m.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
-                      weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric',
-                    })}
-                  </p>
-                  <p className="text-xs text-gray-500">{STATUS_LABELS[m.status] || m.status}</p>
+                  <p className="text-xs uppercase tracking-wide text-gulag-cyan">Lista aberta</p>
+                  <p className="text-gray-100 capitalize">{formatDate(openMatchday.match_date)}</p>
                 </div>
-                <div className="flex gap-2">
-                  <Link to={`/admin/matchdays/${m.id}`}>
-                    <Button variant="secondary">Gerenciar</Button>
-                  </Link>
-                  <Button variant="danger" onClick={() => removeMatchday(m)}>Apagar</Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                <MatchdayActions matchday={openMatchday} onRemove={removeMatchday} />
+              </div>
+            )}
+
+            {previous.length > 0 && (
+              <MatchdayAccordion
+                matchdays={previous}
+                renderItem={(m) => (
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-2">
+                    <div>
+                      <p className="text-sm text-gray-200 capitalize">{formatDate(m.match_date)}</p>
+                      <p className="text-xs text-gray-500">{STATUS_LABELS[m.status] || m.status}</p>
+                    </div>
+                    <MatchdayActions matchday={m} onRemove={removeMatchday} />
+                  </div>
+                )}
+              />
+            )}
+          </div>
         )}
       </Card>
 
@@ -117,6 +133,17 @@ export default function AdminMatchdaysPage() {
           onSaved={() => { setShowSeason(false); setEditingSeason(null); load(); }}
         />
       )}
+    </div>
+  );
+}
+
+function MatchdayActions({ matchday, onRemove }) {
+  return (
+    <div className="flex gap-2 shrink-0">
+      <Link to={`/admin/matchdays/${matchday.id}`}>
+        <Button variant="secondary">Gerenciar</Button>
+      </Link>
+      <Button variant="danger" onClick={() => onRemove(matchday)}>Apagar</Button>
     </div>
   );
 }

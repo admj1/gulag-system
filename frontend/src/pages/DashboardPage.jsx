@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/client';
+import MatchdayAccordion from '../components/MatchdayAccordion';
 import { useAuth } from '../context/AuthContext';
 import { Button, Card, EmptyState } from '../components/ui';
 
@@ -11,6 +12,7 @@ const formatDate = (date) =>
   new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', {
     weekday: 'long', day: '2-digit', month: '2-digit',
   });
+
 
 export default function DashboardPage() {
   const { player } = useAuth();
@@ -106,21 +108,22 @@ export default function DashboardPage() {
 
       {others.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold text-gray-400 mb-2">Peladas anteriores</h2>
-          <ul className="flex flex-col gap-2">
-            {others.map((m) => (
-              <li key={m.id}>
-                <Link to={`/peladas/${m.id}`}>
-                  <Card className="hover:border-gulag-cyan">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-gray-200 capitalize">{formatDate(m.match_date)}</span>
-                      <span className="text-xs text-gray-500">{STATUS_LABELS[m.status] || m.status}</span>
-                    </div>
-                  </Card>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <h2 className="text-sm font-semibold text-gray-400 mb-2">
+            Peladas anteriores <span className="text-gray-600">({others.length})</span>
+          </h2>
+
+          <MatchdayAccordion
+            matchdays={others}
+            renderItem={(m) => (
+              <Link
+                to={`/peladas/${m.id}`}
+                className="flex items-center justify-between gap-3 rounded px-2 py-2 hover:bg-gulag-surface-2"
+              >
+                <span className="text-sm text-gray-200 capitalize">{formatDate(m.match_date)}</span>
+                <span className="text-xs text-gray-500">{STATUS_LABELS[m.status] || m.status}</span>
+              </Link>
+            )}
+          />
         </div>
       )}
     </div>
