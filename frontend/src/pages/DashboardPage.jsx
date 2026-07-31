@@ -4,14 +4,9 @@ import toast from 'react-hot-toast';
 import api from '../api/client';
 import MatchdayAccordion from '../components/MatchdayAccordion';
 import { useAuth } from '../context/AuthContext';
-import { Button, Card, EmptyState } from '../components/ui';
+import { Button, Card, EmptyState, matchDateLabel } from '../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
-
-const formatDate = (date) =>
-  new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', {
-    weekday: 'long', day: '2-digit', month: '2-digit',
-  });
 
 
 export default function DashboardPage() {
@@ -71,7 +66,7 @@ export default function DashboardPage() {
       {open ? (
         <Card className="border-gulag-cyan/50">
           <p className="text-xs uppercase tracking-wide text-gulag-cyan mb-1">Próxima pelada</p>
-          <p className="text-lg font-semibold text-gray-100 capitalize">{formatDate(open.match_date)}</p>
+          <p className="text-lg font-semibold text-gray-100">{matchDateLabel(open.match_date)}</p>
 
           {myStatus === 'confirmed' ? (
             <div className="mt-3 rounded bg-emerald-500/10 border border-emerald-600/40 p-3 text-center">
@@ -119,7 +114,7 @@ export default function DashboardPage() {
                 to={`/peladas/${m.id}`}
                 className="flex items-center justify-between gap-3 rounded px-2 py-2 hover:bg-gulag-surface-2"
               >
-                <span className="text-sm text-gray-200 capitalize">{formatDate(m.match_date)}</span>
+                <span className="text-sm text-gray-200">{matchDateLabel(m.match_date)}</span>
                 <span className="text-xs text-gray-500">{STATUS_LABELS[m.status] || m.status}</span>
               </Link>
             )}

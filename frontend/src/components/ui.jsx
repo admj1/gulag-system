@@ -62,6 +62,14 @@ export function Avatar({ src, name, size = 'md' }) {
   );
 }
 
+// Toda pelada e no sabado, entao o dia da semana nao acrescenta nada: 25/07/26.
+// Le a data como texto ('AAAA-MM-DD') para nao arriscar deslocamento de fuso.
+export function matchDateLabel(date) {
+  const [year, month, day] = String(date || '').split('-');
+  if (!day) return '';
+  return `${day}/${month}/${year.slice(2)}`;
+}
+
 export function EmptyState({ children }) {
   return <p className="text-sm text-gray-500 py-4 text-center">{children}</p>;
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
 import Modal from '../../components/Modal';
-import { inputClass, Button, Card, Field, EmptyState } from '../../components/ui';
+import { inputClass, Button, Card, Field, EmptyState, matchDateLabel } from '../../components/ui';
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -158,9 +158,7 @@ export default function AdminFinancePage() {
             {pending.map((group) => (
               <div key={group.date}>
                 <h3 className="text-sm font-semibold text-gulag-cyan mb-1">
-                  {group.match_date
-                    ? new Date(`${group.match_date}T12:00:00`).toLocaleDateString('pt-BR')
-                    : 'Sem data'}
+                  {group.match_date ? matchDateLabel(group.match_date) : 'Sem data'}
                 </h3>
                 <ol className="flex flex-col gap-1">
                   {group.items.map((item, i) => (

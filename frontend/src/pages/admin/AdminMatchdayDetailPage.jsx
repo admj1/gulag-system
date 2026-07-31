@@ -6,7 +6,9 @@ import AtaList from '../../components/AtaList';
 import TeamDraw from '../../components/TeamDraw';
 import { setUnsaved, confirmLeave } from '../../components/unsavedGuard';
 import { useAuth } from '../../context/AuthContext';
-import { inputClass, Button, Card, ScrollArea, EmptyState, bestTeam } from '../../components/ui';
+import {
+  inputClass, Button, Card, ScrollArea, EmptyState, bestTeam, matchDateLabel,
+} from '../../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
 const numberInput = 'w-14 bg-gulag-surface-2 border border-gulag-border text-gray-100 rounded px-2 py-1 text-sm text-center';
@@ -305,9 +307,7 @@ export default function AdminMatchdayDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="font-medium text-gray-100">
-              {new Date(`${matchday.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
-                weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
-              })}
+              {matchDateLabel(matchday.match_date)}
             </p>
             <p className="text-xs text-gray-500">
               {confirmed.length} confirmados · {STATUS_LABELS[matchday.status] || matchday.status}

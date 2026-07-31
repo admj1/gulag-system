@@ -38,6 +38,8 @@ function appBaseUrl(req) {
   return url.replace(/\/+$/, '');
 }
 
+// No e-mail a data vai por extenso: quem le esta fora do sistema, as vezes dias
+// depois, e o "sabado" ajuda a situar. Nas telas o formato e curto (25/07/26).
 function formatDate(matchDate) {
   return new Date(`${matchDate}T12:00:00`).toLocaleDateString('pt-BR', {
     weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',

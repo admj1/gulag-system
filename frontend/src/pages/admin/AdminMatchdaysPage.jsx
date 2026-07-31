@@ -6,14 +6,9 @@ import api from '../../api/client';
 import MatchdayAccordion from '../../components/MatchdayAccordion';
 import Modal from '../../components/Modal';
 import PlayerPicker from '../../components/PlayerPicker';
-import { inputClass, Button, Card, Field, EmptyState } from '../../components/ui';
+import { inputClass, Button, Card, Field, EmptyState, matchDateLabel } from '../../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
-
-const formatDate = (date) =>
-  new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', {
-    weekday: 'short', day: '2-digit', month: '2-digit',
-  });
 
 export default function AdminMatchdaysPage() {
   const [matchdays, setMatchdays] = useState([]);
@@ -77,7 +72,7 @@ export default function AdminMatchdaysPage() {
               <div className="border border-gulag-cyan/50 rounded p-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-gulag-cyan">Lista aberta</p>
-                  <p className="text-gray-100 capitalize">{formatDate(openMatchday.match_date)}</p>
+                  <p className="text-gray-100">{matchDateLabel(openMatchday.match_date)}</p>
                 </div>
                 <MatchdayActions matchday={openMatchday} onRemove={removeMatchday} />
               </div>
@@ -89,7 +84,7 @@ export default function AdminMatchdaysPage() {
                 renderItem={(m) => (
                   <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-2">
                     <div>
-                      <p className="text-sm text-gray-200 capitalize">{formatDate(m.match_date)}</p>
+                      <p className="text-sm text-gray-200">{matchDateLabel(m.match_date)}</p>
                       <p className="text-xs text-gray-500">{STATUS_LABELS[m.status] || m.status}</p>
                     </div>
                     <MatchdayActions matchday={m} onRemove={removeMatchday} />

@@ -5,7 +5,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import AtaList from '../components/AtaList';
 import InvitePlayer from '../components/InvitePlayer';
-import { Button, Card, ScrollArea, bestTeam } from '../components/ui';
+import { Button, Card, ScrollArea, bestTeam, matchDateLabel } from '../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
 
@@ -73,9 +73,7 @@ export default function MatchdayPage() {
 
       <Card>
         <p className="font-medium text-gray-100">
-          {new Date(`${matchday.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
-            weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
-          })}
+          {matchDateLabel(matchday.match_date)}
         </p>
         <p className="text-xs text-gray-500 mb-3">{STATUS_LABELS[matchday.status] || matchday.status}</p>
 

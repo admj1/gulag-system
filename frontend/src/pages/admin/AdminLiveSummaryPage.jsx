@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
 import { newClientId, useLiveQueue } from '../../components/liveQueue';
-import { Button, Card, EmptyState, bestTeam } from '../../components/ui';
+import { Button, Card, EmptyState, bestTeam, matchDateLabel } from '../../components/ui';
 
 // Lancamento em campo, pelo celular: um toque no cartao do jogador = gol,
 // segurar = assistencia, e os botoes cobrem o resto da ata. O placar do rodizio
@@ -162,9 +162,7 @@ export default function AdminLiveSummaryPage() {
           ← súmula completa
         </Link>
         <span className="text-xs text-gray-500">
-          {new Date(`${data.matchday.match_date}T12:00:00`).toLocaleDateString('pt-BR', {
-            weekday: 'short', day: '2-digit', month: '2-digit',
-          })}
+          {matchDateLabel(data.matchday.match_date)}
         </span>
       </div>
 
