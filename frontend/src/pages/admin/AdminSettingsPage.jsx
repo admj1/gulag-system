@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
-import { inputClass, Button, Card, Field, EmptyState } from '../../components/ui';
+import { inputClass, Button, Card, Field, EmptyState, matchDateLabel } from '../../components/ui';
 
 export default function AdminSettingsPage() {
   const { register, handleSubmit, reset, formState } = useForm();
@@ -94,6 +94,7 @@ function InviteTemplateCard({ settings, onSaved }) {
   const [html, setHtml] = useState(settings.invite_html || defaultHtml);
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   const usingDefault = !settings.invite_html;
 
@@ -110,6 +111,30 @@ function InviteTemplateCard({ settings, onSaved }) {
       toast.error(err.response?.data?.error || 'Erro ao salvar o modelo');
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Teste do modelo salvo, sempre só para o próprio admin. Usa a pelada mais
+  // recente porque o convite precisa de uma data e de um link de verdade.
+  async function sendTest() {
+    setTesting(true);
+    try {
+      const { data: matchdays } = await api.get('/matchdays');
+      const target = matchdays[0];
+      if (!target) {
+        toast.error('Lance uma pelada primeiro — o teste usa os dados de uma pelada real.');
+        return;
+      }
+      const { data } = await api.post(`/matchdays/${target.id}/notify`, { test: true });
+      if (data.sent > 0) {
+        toast.success(`Teste enviado só para você (pelada de ${matchDateLabel(target.match_date)}).`);
+      } else {
+        toast.error(data.lastError || 'O servidor não conseguiu enviar. Veja o log do Railway.');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao enviar o teste');
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -161,6 +186,9 @@ function InviteTemplateCard({ settings, onSaved }) {
         <Button onClick={() => save(html)} disabled={saving}>
           {saving ? 'Salvando...' : 'Salvar modelo'}
         </Button>
+        <Button variant="secondary" onClick={sendTest} disabled={testing || saving}>
+          {testing ? 'Enviando...' : '✉ Enviar teste para mim'}
+        </Button>
         <Button variant="secondary" onClick={() => setHtml(defaultHtml)} disabled={saving}>
           Carregar modelo padrão
         </Button>
@@ -172,10 +200,9 @@ function InviteTemplateCard({ settings, onSaved }) {
       </div>
 
       <p className="text-xs text-gray-500 mt-3">
-        A versão em texto puro que acompanha a mensagem continua sendo montada pelo sistema — ela é
-        a reserva para quem lê e-mail em modo simples. Depois de salvar, use o botão
-        "✉ Testar em mim" na tela da pelada: ele manda o convite de verdade, só que apenas para o
-        seu e-mail.
+        O teste manda o convite de verdade, com os dados da pelada mais recente, mas só para o seu
+        e-mail — mais ninguém recebe. A versão em texto puro que acompanha a mensagem continua sendo
+        montada pelo sistema: é a reserva para quem lê e-mail em modo simples.
       </p>
     </Card>
   );

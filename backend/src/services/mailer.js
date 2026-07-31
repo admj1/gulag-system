@@ -26,6 +26,11 @@ function getTransporter() {
       port,
       secure: port === 465, // 465 abre TLS direto; 587 sobe com STARTTLS
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      // Sem limite proprio, uma porta bloqueada deixa o admin uns 2 minutos
+      // olhando para "Enviando..." sem resposta nenhuma
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
     });
   }
   return transporter;
@@ -198,6 +203,7 @@ async function sendMatchdayInvites(matchdayId, baseUrl, { onlyPlayerId = null } 
 
   let sent = 0;
   let failed = 0;
+  let lastError = null;
   for (const player of recipients) {
     const { html, text } = inviteTemplate({
       name: player.name, playerType: player.player_type,
@@ -218,11 +224,15 @@ async function sendMatchdayInvites(matchdayId, baseUrl, { onlyPlayerId = null } 
       sent += 1;
     } catch (err) {
       failed += 1;
+      lastError = err.message;
       console.error(`Falha ao avisar ${player.email}:`, err.message);
     }
   }
 
-  return { configured: true, recipients: recipients.length, sent, failed, elenco: elenco.length };
+  return {
+    configured: true, recipients: recipients.length, sent, failed, lastError,
+    elenco: elenco.length,
+  };
 }
 
 module.exports = {

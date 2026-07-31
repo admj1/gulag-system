@@ -141,9 +141,13 @@ export default function AdminMatchdayDetailPage() {
     try {
       const { data } = await api.post(`/matchdays/${id}/notify`, { test: !!test });
       if (test) {
-        toast.success(
-          `Teste enviado só para você. No envio real iriam ${data.elenco} e-mail(s).`
-        );
+        // O servidor tenta um a um e nao derruba a requisicao quando falha:
+        // sem olhar o "sent", um envio que nao saiu apareceria como sucesso
+        if (data.sent > 0) {
+          toast.success(`Teste enviado só para você. No envio real iriam ${data.elenco} e-mail(s).`);
+        } else {
+          toast.error(data.lastError || 'O servidor não conseguiu enviar. Veja o log do Railway.');
+        }
       } else if (data.recipients === 0) {
         toast('Ninguém tem e-mail cadastrado.');
       } else {
