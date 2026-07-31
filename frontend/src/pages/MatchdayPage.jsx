@@ -5,7 +5,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import AtaList from '../components/AtaList';
 import InvitePlayer from '../components/InvitePlayer';
-import { Button, Card, ScrollArea, bestTeam, matchDateLabel } from '../components/ui';
+import { Button, Card, ScrollArea, Section, bestTeam, matchDateLabel } from '../components/ui';
 
 const STATUS_LABELS = { open: 'Lista aberta', closed: 'Lista fechada', played: 'Realizada' };
 
@@ -66,6 +66,9 @@ export default function MatchdayPage() {
   const inAta = new Set(confirmations.map((c) => c.player_id));
   const candidates = allPlayers.filter((p) => p.player_type !== 'mensalista' && !inAta.has(p.id));
   const champion = bestTeam(teams);
+  // A ata vale ate a pelada acontecer; depois quem manda e a sumula
+  const played = matchday.status === 'played';
+  const confirmedCount = confirmations.filter((c) => c.status === 'confirmed').length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -109,17 +112,43 @@ export default function MatchdayPage() {
         )}
       </Card>
 
-      <AtaList
-        confirmations={confirmations}
-        currentPlayerId={player?.id}
-        isAdmin={player?.role === 'admin'}
-        onRemove={matchday.status === 'open' ? removeFromAta : undefined}
-      />
+      <Section
+        title="Ata"
+        hint={`${confirmedCount} confirmado${confirmedCount === 1 ? '' : 's'}`}
+        defaultOpen={!played}
+      >
+        <AtaList
+          confirmations={confirmations}
+          currentPlayerId={player?.id}
+          isAdmin={player?.role === 'admin'}
+          onRemove={matchday.status === 'open' ? removeFromAta : undefined}
+        />
 
-      {matchday.status === 'open' && (
-        <InvitePlayer matchdayId={id} candidates={candidates} onInvited={load} />
+        {matchday.status === 'open' && (
+          <InvitePlayer matchdayId={id} candidates={candidates} onInvited={load} />
+        )}
+      </Section>
+
+      {teams.length > 0 && (
+        <SummarySection
+          teams={teams}
+          summary={summary}
+          nameById={nameById}
+          champion={champion}
+        />
       )}
+    </div>
+  );
+}
 
+// Depois da pelada realizada e a sumula que interessa, entao ela nasce aberta.
+function SummarySection({ teams, summary, nameById, champion }) {
+  return (
+    <Section
+      title="Súmula"
+      hint={champion ? `🏆 ${champion.name}` : `${teams.length} times`}
+      defaultOpen
+    >
       {teams.map((team) => {
         const stats = summary.playerStats.filter((s) => s.team_id === team.id);
         const isBest = champion?.id === team.id;
@@ -178,6 +207,7 @@ export default function MatchdayPage() {
           </Card>
         );
       })}
+
       {/* Goleiros aparecem depois dos times, como na ata em papel */}
       {summary.goalkeeperStats.length > 0 && (
         <Card title="Goleiros">
@@ -211,7 +241,6 @@ export default function MatchdayPage() {
           </ScrollArea>
         </Card>
       )}
-
-    </div>
+    </Section>
   );
 }

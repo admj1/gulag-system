@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { inputClass, Card, Field, EmptyState } from '../components/ui';
@@ -11,10 +11,13 @@ const MONTHS = [
 export default function RankingsPage() {
   const [rankings, setRankings] = useState({ topScorers: [], topAssists: [], topGoalkeepers: [] });
   const [seasons, setSeasons] = useState([]);
+  const [periods, setPeriods] = useState([]);
   const [filters, setFilters] = useState({ month: '', year: '', seasonId: '' });
 
   useEffect(() => {
     api.get('/seasons').then(({ data }) => setSeasons(data));
+    // Só os meses/anos que têm súmula lançada entram nos seletores
+    api.get('/stats/rankings/periods').then(({ data }) => setPeriods(data));
   }, []);
 
   useEffect(() => {
@@ -25,12 +28,32 @@ export default function RankingsPage() {
     api.get('/stats/rankings', { params }).then(({ data }) => setRankings(data));
   }, [filters]);
 
-  function setFilter(key, value) {
-    setFilters((prev) => ({ ...prev, [key]: value }));
-  }
+  const years = useMemo(
+    () => [...new Set(periods.map((p) => p.year))],
+    [periods]
+  );
 
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
+  // Escolhido um ano, o seletor de mês mostra só os meses daquele ano
+  const months = useMemo(() => {
+    const doAno = filters.year
+      ? periods.filter((p) => String(p.year) === String(filters.year))
+      : periods;
+    return [...new Set(doAno.map((p) => p.month))].sort((a, b) => a - b);
+  }, [periods, filters.year]);
+
+  function setFilter(key, value) {
+    setFilters((prev) => {
+      const next = { ...prev, [key]: value };
+      // Trocar de ano pode deixar um mês selecionado que não existe nele
+      if (key === 'year' && prev.month) {
+        const disponivel = periods.some(
+          (p) => String(p.month) === String(prev.month) && (!value || String(p.year) === String(value))
+        );
+        if (!disponivel) next.month = '';
+      }
+      return next;
+    });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -39,13 +62,23 @@ export default function RankingsPage() {
       <Card title="Período">
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Mês">
-            <select value={filters.month} onChange={(e) => setFilter('month', e.target.value)} className={inputClass}>
+            <select
+              value={filters.month}
+              onChange={(e) => setFilter('month', e.target.value)}
+              className={inputClass}
+              disabled={months.length === 0}
+            >
               <option value="">Todos</option>
-              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              {months.map((m) => <option key={m} value={m}>{MONTHS[m - 1]}</option>)}
             </select>
           </Field>
           <Field label="Ano">
-            <select value={filters.year} onChange={(e) => setFilter('year', e.target.value)} className={inputClass}>
+            <select
+              value={filters.year}
+              onChange={(e) => setFilter('year', e.target.value)}
+              className={inputClass}
+              disabled={years.length === 0}
+            >
               <option value="">Todos</option>
               {years.map((y) => <option key={y} value={y}>{y}</option>)}
             </select>

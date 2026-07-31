@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 export const inputClass =
   'w-full bg-gulag-surface-2 border border-gulag-border text-gray-100 placeholder-gray-500 rounded px-3 py-2 text-base focus:outline-none focus:border-gulag-cyan';
 
@@ -25,6 +27,34 @@ export function Card({ title, action, children, className = '' }) {
         </header>
       )}
       {children}
+    </section>
+  );
+}
+
+// Bloco que abre e fecha. Usado para separar ATA e SÚMULA na tela da pelada:
+// antes do jogo o que importa e a lista; depois, a sumula.
+export function Section({ title, hint, defaultOpen = true, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <section className="border border-gulag-border rounded-lg bg-gulag-surface">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-2 p-3 text-left"
+      >
+        <span className="flex items-baseline gap-2 min-w-0">
+          <span className="font-semibold text-gulag-cyan uppercase tracking-wide text-sm">
+            {title}
+          </span>
+          {hint && <span className="text-xs text-gray-500 truncate">{hint}</span>}
+        </span>
+        <span className="text-gulag-cyan text-sm shrink-0">{open ? '▾' : '▸'}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-gulag-border p-3 flex flex-col gap-4">{children}</div>
+      )}
     </section>
   );
 }

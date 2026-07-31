@@ -364,6 +364,25 @@ function periodFilter({ month, year, seasonId }, startIndex) {
   return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', params };
 }
 
+// Periodos que realmente tem sumula lancada, para o filtro dos rankings nao
+// oferecer mes e ano vazios.
+async function rankingPeriods(req, res, next) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT
+         EXTRACT(YEAR FROM m.match_date)::int AS year,
+         EXTRACT(MONTH FROM m.match_date)::int AS month
+       FROM matchdays m
+       WHERE EXISTS (SELECT 1 FROM player_match_stats s WHERE s.matchday_id = m.id)
+          OR EXISTS (SELECT 1 FROM goalkeeper_match_stats g WHERE g.matchday_id = m.id)
+       ORDER BY year DESC, month DESC`
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function rankings(req, res, next) {
   try {
     const filter = {
@@ -416,4 +435,6 @@ async function rankings(req, res, next) {
   }
 }
 
-module.exports = { playerProfile, rankings, comparePlayers, starSuggestions };
+module.exports = {
+  playerProfile, rankings, rankingPeriods, comparePlayers, starSuggestions,
+};
