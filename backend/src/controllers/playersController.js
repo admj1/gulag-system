@@ -4,7 +4,7 @@ const { displayNameSql } = require('../config/settings');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
   phone, email, photo_url, position, stars, role, player_type, blocked, mensalista_number,
-  active, is_owner, login_locked`;
+  active, is_owner, login_locked, exempt_monthly`;
 
 // Mensalistas seguem a propria numeracao; os demais ficam em ordem alfabetica
 const PLAYER_ORDER = `mensalista_number NULLS LAST, ${displayNameSql()}`;
@@ -185,7 +185,7 @@ async function update(req, res, next) {
   try {
     const {
       first_name, last_name, nickname, position, stars, photo_url,
-      mensalista_number, phone, email, password,
+      mensalista_number, phone, email, password, exempt_monthly,
     } = req.body;
     const number = parseMensalistaNumber(mensalista_number);
 
@@ -225,7 +225,8 @@ async function update(req, res, next) {
          password_hash = COALESCE($14, password_hash),
          -- Senha nova do admin tambem libera o bloqueio por tentativas
          login_locked = CASE WHEN $14 IS NOT NULL THEN FALSE ELSE login_locked END,
-         failed_login_attempts = CASE WHEN $14 IS NOT NULL THEN 0 ELSE failed_login_attempts END
+         failed_login_attempts = CASE WHEN $14 IS NOT NULL THEN 0 ELSE failed_login_attempts END,
+         exempt_monthly = CASE WHEN $16::boolean THEN $17::boolean ELSE exempt_monthly END
        WHERE id = $15
        RETURNING ${PLAYER_FIELDS}`,
       [first_name, last_name,
@@ -234,7 +235,8 @@ async function update(req, res, next) {
        mensalista_number !== undefined, number,
        phone !== undefined, phone,
        email !== undefined, email,
-       passwordHash, req.params.id]
+       passwordHash, req.params.id,
+       exempt_monthly !== undefined, !!exempt_monthly]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
     res.json(rows[0]);

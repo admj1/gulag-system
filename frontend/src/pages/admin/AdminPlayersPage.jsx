@@ -327,6 +327,7 @@ function PlayerEditor({ player, onChange, isOwner }) {
       position: player.position || '',
       stars: player.stars,
       mensalista_number: player.mensalista_number ?? '',
+      exempt_monthly: !!player.exempt_monthly,
       password: '',
     },
   });
@@ -496,6 +497,16 @@ function PlayerEditor({ player, onChange, isOwner }) {
         <Field label="Número do mensalista (1-99)">
           <input {...register('mensalista_number')} type="number" min="1" max="99" className={inputClass} />
         </Field>
+        <label className="flex items-start gap-2 text-sm text-gray-300 sm:col-span-2">
+          <input type="checkbox" {...register('exempt_monthly')} className="w-4 h-4 mt-0.5" />
+          <span>
+            Isento de mensalidade
+            <span className="block text-xs text-gray-500">
+              Para a diretoria: continua na lista de mensalistas e na ata, mas não gera cobrança
+              mensal. Diárias e multas não são afetadas.
+            </span>
+          </span>
+        </label>
         <div className="sm:col-span-2">
           <Button disabled={formState.isSubmitting}>Salvar cadastro</Button>
         </div>

@@ -258,21 +258,28 @@ export default function AdminFinancePage() {
                   )}
                 </span>
                 <span className="flex items-center gap-2 shrink-0">
-                  {row.status === 'paid' ? (
-                    <span className="text-xs text-emerald-400">
-                      pago em {new Date(row.paid_at).toLocaleDateString('pt-BR')}
-                    </span>
+                  {/* Diretoria continua listada, mas sem cobranca nem botao */}
+                  {row.exempt_monthly ? (
+                    <span className="text-xs text-gulag-cyan">isento</span>
                   ) : (
-                    <span className="text-xs text-amber-400">em aberto</span>
+                    <>
+                      {row.status === 'paid' ? (
+                        <span className="text-xs text-emerald-400">
+                          pago em {new Date(row.paid_at).toLocaleDateString('pt-BR')}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-400">em aberto</span>
+                      )}
+                      <Button
+                        variant={row.status === 'paid' ? 'secondary' : 'primary'}
+                        onClick={() => (row.status === 'paid'
+                          ? undoMonthly(row)
+                          : askPaymentDate({ kind: 'monthly', row }))}
+                      >
+                        {row.status === 'paid' ? 'Desfazer' : 'Pagar'}
+                      </Button>
+                    </>
                   )}
-                  <Button
-                    variant={row.status === 'paid' ? 'secondary' : 'primary'}
-                    onClick={() => (row.status === 'paid'
-                      ? undoMonthly(row)
-                      : askPaymentDate({ kind: 'monthly', row }))}
-                  >
-                    {row.status === 'paid' ? 'Desfazer' : 'Pagar'}
-                  </Button>
                 </span>
               </li>
             ))}

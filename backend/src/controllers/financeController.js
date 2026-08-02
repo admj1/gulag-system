@@ -19,6 +19,10 @@ const MONTHLY_MEMBER_SQL = `
   )
 `;
 
+// Quem efetivamente gera cobranca: a diretoria e isenta, mas continua
+// aparecendo na lista do mes — so que marcada e sem botao de pagar.
+const MONTHLY_PAYER_SQL = `NOT p.exempt_monthly AND (${MONTHLY_MEMBER_SQL})`;
+
 // Mensalidades de um mes/ano: lista quem deve com status pago/em aberto
 async function monthlyOverview(req, res, next) {
   try {
@@ -31,7 +35,8 @@ async function monthlyOverview(req, res, next) {
     const { rows } = await pool.query(
       `SELECT p.id AS player_id, ${displayNameSql('p')} AS name,
               pay.id AS payment_id, pay.amount, pay.status, pay.paid_at,
-              (p.player_type = 'mensalista' AND p.active) AS current_mensalista
+              (p.player_type = 'mensalista' AND p.active) AS current_mensalista,
+              p.exempt_monthly
        FROM players p
        LEFT JOIN payments pay
          ON pay.player_id = p.id AND pay.type = 'mensalidade'
@@ -134,6 +139,7 @@ async function openMonthlyDebts(req, res, next) {
         AND pay.reference_month = EXTRACT(MONTH FROM m.mes)::int
         AND pay.reference_year = EXTRACT(YEAR FROM m.mes)::int
        WHERE pay.id IS NULL
+         AND NOT p.exempt_monthly
          AND (
            (p.player_type = 'mensalista' AND p.active AND m.mes >= e.desde)
            OR EXISTS (
@@ -206,7 +212,7 @@ async function setMonthlyStatusForAll(req, res, next) {
       `INSERT INTO payments (player_id, type, reference_month, reference_year, amount, status, paid_at)
        SELECT p.id, 'mensalidade', $1, $2, $3, 'paid', COALESCE($4::timestamptz, now())
        FROM players p
-       WHERE (${MONTHLY_MEMBER_SQL})
+       WHERE (${MONTHLY_PAYER_SQL})
          AND NOT EXISTS (
            SELECT 1 FROM payments pay
            WHERE pay.player_id = p.id AND pay.type = 'mensalidade'
