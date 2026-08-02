@@ -17,6 +17,7 @@ export default function AdminFinancePage() {
   const [year, setYear] = useState(now.getFullYear());
   const [monthly, setMonthly] = useState([]);
   const [pending, setPending] = useState([]);
+  const [debts, setDebts] = useState(null);
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
   const [paying, setPaying] = useState(null);
 
@@ -28,8 +29,13 @@ export default function AdminFinancePage() {
     api.get('/finance/pending').then(({ data }) => setPending(data));
   }, []);
 
+  const loadDebts = useCallback(() => {
+    api.get('/finance/monthly/open').then(({ data }) => setDebts(data));
+  }, []);
+
   useEffect(loadMonthly, [loadMonthly]);
   useEffect(loadPending, [loadPending]);
+  useEffect(loadDebts, [loadDebts]);
 
   // Ao clicar em pagar, abre a caixa para informar a data em que o pagamento foi feito
   function askPaymentDate(target) {
@@ -45,6 +51,7 @@ export default function AdminFinancePage() {
           month, year, paid: true, paid_at,
         });
         loadMonthly();
+        loadDebts();
         setPaying(null);
         toast.success(`${data.changed} mensalidade(s) quitada(s)`);
         return;
@@ -56,6 +63,7 @@ export default function AdminFinancePage() {
           month, year, paid: true, paid_at,
         });
         loadMonthly();
+        loadDebts();
       } else {
         await api.patch(`/finance/${paying.item.id}/pay`, { paid_at });
         loadPending();
@@ -76,6 +84,7 @@ export default function AdminFinancePage() {
       const { data } = await api.post('/finance/monthly/all', { month, year, paid: false });
       toast.success(`${data.changed} mensalidade(s) reaberta(s)`);
       loadMonthly();
+      loadDebts();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao reabrir o mês');
     }
@@ -85,6 +94,7 @@ export default function AdminFinancePage() {
     try {
       await api.post('/finance/monthly', { player_id: row.player_id, month, year, paid: false });
       loadMonthly();
+      loadDebts();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao desfazer');
     }
@@ -150,8 +160,61 @@ export default function AdminFinancePage() {
         </Modal>
       )}
 
+      {debts && (
+        <Card
+          title="Mensalidades em aberto"
+          action={
+            <span className="text-sm font-semibold text-amber-400">
+              R$ {debts.total.toFixed(2)}
+            </span>
+          }
+        >
+          {debts.players.length === 0 ? (
+            <EmptyState>Nenhuma mensalidade em aberto. Tudo em dia.</EmptyState>
+          ) : (
+            <>
+              <p className="text-xs text-gray-500 mb-2">
+                {debts.months} mensalidade(s) de {debts.players.length} jogador(es), de todos os
+                meses. Toque em um mês para abrir o detalhe dele logo abaixo.
+              </p>
+              <ol className="flex flex-col gap-2">
+                {debts.players.map((p) => (
+                  <li key={p.player_id} className="border-b border-gulag-border pb-2 last:border-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-gray-100 min-w-0 truncate">
+                        {p.name}
+                        {!p.current_mensalista && (
+                          <span className="text-[10px] text-amber-400 border border-amber-700/60 rounded px-1 ml-1">
+                            ex-mensalista
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-sm text-amber-400 shrink-0">
+                        R$ {p.total.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {p.months.map((m) => (
+                        <button
+                          key={`${m.year}-${m.month}`}
+                          onClick={() => { setMonth(m.month); setYear(m.year); }}
+                          title={`Ver ${MONTHS[m.month - 1]}/${m.year}`}
+                          className="rounded border border-gulag-border bg-gulag-surface-2 px-2 py-0.5 text-[11px] text-gray-300 hover:border-gulag-cyan"
+                        >
+                          {MONTHS[m.month - 1].slice(0, 3).toLowerCase()}/{String(m.year).slice(2)}
+                        </button>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+        </Card>
+      )}
+
       <Card
-        title="Mensalidades"
+        title="Mensalidades por mês"
         action={
           <div className="flex gap-2 flex-wrap justify-end">
             <Button variant="secondary" onClick={() => askPaymentDate({ kind: 'monthly-all' })}>

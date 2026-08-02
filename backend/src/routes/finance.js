@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(authenticate, requireAdmin);
 
 router.get('/monthly', controller.monthlyOverview);
+router.get('/monthly/open', controller.openMonthlyDebts);
 router.post('/monthly', controller.setMonthlyStatus);
 router.post('/monthly/all', controller.setMonthlyStatusForAll);
 router.get('/pending', controller.pendingByMatchday);

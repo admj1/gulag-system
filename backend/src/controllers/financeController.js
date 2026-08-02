@@ -87,6 +87,97 @@ async function setMonthlyStatus(req, res, next) {
   }
 }
 
+// Todas as mensalidades em aberto, de todos os meses, agrupadas por jogador.
+// "Em aberto" nao tem registro proprio: e a ausencia da cobranca no mes, entao
+// o mes so existe aqui se alguem deveria ter pago e nao ha linha lancada.
+// A varredura comeca no mes mais antigo com movimento e vai ate o mes atual,
+// e nunca cobra de alguem antes do cadastro dele existir.
+async function openMonthlyDebts(req, res, next) {
+  try {
+    const settings = await getSettings();
+    const { rows } = await pool.query(
+      `WITH limites AS (
+         SELECT COALESCE(
+           LEAST(
+             (SELECT MIN(make_date(reference_year, reference_month, 1))
+              FROM payments WHERE type = 'mensalidade'),
+             (SELECT MIN(date_trunc('month', match_date))::date FROM matchdays)
+           ),
+           date_trunc('month', CURRENT_DATE)::date
+         ) AS primeiro
+       ),
+       meses AS (
+         SELECT generate_series(
+           (SELECT primeiro FROM limites),
+           date_trunc('month', CURRENT_DATE)::date,
+           INTERVAL '1 month'
+         )::date AS mes
+       ),
+       entrada AS (
+         SELECT p.id AS player_id,
+                date_trunc('month', COALESCE(
+                  (SELECT MIN(h.start_date) FROM player_status_history h
+                   WHERE h.player_id = p.id AND h.player_type = 'mensalista'),
+                  p.created_at::date
+                ))::date AS desde
+         FROM players p
+       )
+       SELECT p.id AS player_id, ${displayNameSql('p')} AS name,
+              (p.player_type = 'mensalista' AND p.active) AS current_mensalista,
+              EXTRACT(YEAR FROM m.mes)::int AS year,
+              EXTRACT(MONTH FROM m.mes)::int AS month
+       FROM meses m
+       CROSS JOIN players p
+       JOIN entrada e ON e.player_id = p.id
+       LEFT JOIN payments pay
+         ON pay.player_id = p.id AND pay.type = 'mensalidade'
+        AND pay.reference_month = EXTRACT(MONTH FROM m.mes)::int
+        AND pay.reference_year = EXTRACT(YEAR FROM m.mes)::int
+       WHERE pay.id IS NULL
+         AND (
+           (p.player_type = 'mensalista' AND p.active AND m.mes >= e.desde)
+           OR EXISTS (
+             SELECT 1 FROM player_status_history h
+             WHERE h.player_id = p.id AND h.player_type = 'mensalista'
+               AND h.start_date <= (m.mes + INTERVAL '1 month' - INTERVAL '1 day')::date
+               AND (h.end_date IS NULL OR h.end_date >= m.mes)
+           )
+         )
+       ORDER BY ${displayNameSql('p')}, m.mes`
+    );
+
+    const fee = Number(settings.monthly_fee);
+    const players = [];
+    for (const row of rows) {
+      let player = players.find((p) => p.player_id === row.player_id);
+      if (!player) {
+        player = {
+          player_id: row.player_id,
+          name: row.name,
+          current_mensalista: row.current_mensalista,
+          months: [],
+          total: 0,
+        };
+        players.push(player);
+      }
+      player.months.push({ year: row.year, month: row.month });
+      player.total += fee;
+    }
+
+    // Quem deve mais primeiro: e a lista de cobranca do organizador
+    players.sort((a, b) => b.months.length - a.months.length || a.name.localeCompare(b.name));
+
+    res.json({
+      players,
+      fee,
+      total: players.reduce((sum, p) => sum + p.total, 0),
+      months: players.reduce((sum, p) => sum + p.months.length, 0),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Acerto do mes inteiro de uma vez, para bater o sistema com um controle feito
 // por fora. Depois o admin reabre no "Desfazer" quem continua devendo.
 // "Em aberto" nao tem registro proprio: e a ausencia da cobranca, como no
@@ -230,6 +321,6 @@ async function markPending(req, res, next) {
 }
 
 module.exports = {
-  monthlyOverview, setMonthlyStatus, setMonthlyStatusForAll, pendingByMatchday,
-  historyByPlayer, markPaid, markPending, payAllPending,
+  monthlyOverview, openMonthlyDebts, setMonthlyStatus, setMonthlyStatusForAll,
+  pendingByMatchday, historyByPlayer, markPaid, markPending, payAllPending,
 };
