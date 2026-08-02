@@ -4,7 +4,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 const TITLES = {
   '/admin/players': 'Jogadores',
   '/admin/matchdays': 'Gerenciamento de ATAS',
-  '/admin/finance': 'Financeiro',
+  '/admin/finance': 'Controle Financeiro',
   '/admin/whatsapp': 'Confirmação por WhatsApp',
   '/admin/settings': 'Configurações',
 };

@@ -9,6 +9,7 @@ import PlayersPage from './pages/PlayersPage';
 import ComparePlayersPage from './pages/ComparePlayersPage';
 import PlayerProfilePage from './pages/PlayerProfilePage';
 import MyProfilePage from './pages/MyProfilePage';
+import MyFinancePage from './pages/MyFinancePage';
 import RankingsPage from './pages/RankingsPage';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminPlayersPage from './pages/admin/AdminPlayersPage';
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/players/comparar" element={<ComparePlayersPage />} />
         <Route path="/players/:id" element={<PlayerProfilePage />} />
         <Route path="/perfil" element={<MyProfilePage />} />
+        <Route path="/financeiro" element={<MyFinancePage />} />
         <Route path="/rankings" element={<RankingsPage />} />
 
         <Route

@@ -4,7 +4,12 @@ const controller = require('../controllers/financeController');
 
 const router = express.Router();
 
-router.use(authenticate, requireAdmin);
+router.use(authenticate);
+
+// Cada jogador ve a propria situacao; o resto do financeiro e so do admin
+router.get('/me', controller.myDebts);
+
+router.use(requireAdmin);
 
 router.get('/monthly', controller.monthlyOverview);
 router.get('/monthly/open', controller.openMonthlyDebts);

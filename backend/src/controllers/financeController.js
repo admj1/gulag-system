@@ -188,6 +188,80 @@ async function openMonthlyDebts(req, res, next) {
   }
 }
 
+// O proprio jogador consultando a sua situacao. Mesma regra das telas do admin,
+// so que limitada a ele: mensalidade em aberto por mes e diarias/multas por dia.
+async function myDebts(req, res, next) {
+  try {
+    const settings = await getSettings();
+    const playerId = req.user.id;
+
+    const { rows: mensalidades } = await pool.query(
+      `WITH limites AS (
+         SELECT COALESCE(
+           LEAST(
+             (SELECT MIN(make_date(reference_year, reference_month, 1))
+              FROM payments WHERE type = 'mensalidade'),
+             (SELECT MIN(date_trunc('month', match_date))::date FROM matchdays)
+           ),
+           date_trunc('month', CURRENT_DATE)::date
+         ) AS primeiro
+       ),
+       meses AS (
+         SELECT generate_series(
+           (SELECT primeiro FROM limites),
+           date_trunc('month', CURRENT_DATE)::date,
+           INTERVAL '1 month'
+         )::date AS mes
+       )
+       SELECT EXTRACT(YEAR FROM m.mes)::int AS year,
+              EXTRACT(MONTH FROM m.mes)::int AS month
+       FROM meses m
+       CROSS JOIN players p
+       LEFT JOIN payments pay
+         ON pay.player_id = p.id AND pay.type = 'mensalidade'
+        AND pay.reference_month = EXTRACT(MONTH FROM m.mes)::int
+        AND pay.reference_year = EXTRACT(YEAR FROM m.mes)::int
+       WHERE p.id = $1
+         AND (pay.id IS NULL OR pay.status = 'pending')
+         AND NOT p.exempt_monthly
+         AND (
+           pay.id IS NOT NULL
+           OR ${monthlyMemberSql('m.mes', "(m.mes + INTERVAL '1 month' - INTERVAL '1 day')::date")}
+         )
+       ORDER BY m.mes`,
+      [playerId]
+    );
+
+    const { rows: cobrancas } = await pool.query(
+      `SELECT pay.id, pay.type, pay.amount, m.match_date
+       FROM payments pay
+       LEFT JOIN matchdays m ON m.id = pay.matchday_id
+       WHERE pay.player_id = $1 AND pay.type IN ('diaria', 'multa') AND pay.status = 'pending'
+       ORDER BY m.match_date DESC NULLS LAST`,
+      [playerId]
+    );
+
+    const { rows: playerRows } = await pool.query(
+      'SELECT player_type, exempt_monthly FROM players WHERE id = $1', [playerId]
+    );
+
+    const fee = Number(settings.monthly_fee);
+    const totalMensalidades = mensalidades.length * fee;
+    const totalCobrancas = cobrancas.reduce((soma, c) => soma + Number(c.amount), 0);
+
+    res.json({
+      player_type: playerRows[0]?.player_type,
+      exempt_monthly: !!playerRows[0]?.exempt_monthly,
+      fee,
+      months: mensalidades,
+      charges: cobrancas,
+      total: totalMensalidades + totalCobrancas,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Acerto do mes inteiro de uma vez, para bater o sistema com um controle feito
 // por fora. Depois o admin reabre no "Desfazer" quem continua devendo.
 // "Em aberto" nao tem registro proprio: e a ausencia da cobranca, como no
@@ -335,6 +409,6 @@ async function markPending(req, res, next) {
 }
 
 module.exports = {
-  monthlyOverview, openMonthlyDebts, setMonthlyStatus, setMonthlyStatusForAll,
+  monthlyOverview, openMonthlyDebts, myDebts, setMonthlyStatus, setMonthlyStatusForAll,
   pendingByMatchday, historyByPlayer, markPaid, markPending, payAllPending,
 };

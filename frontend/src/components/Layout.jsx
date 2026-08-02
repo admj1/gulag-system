@@ -8,13 +8,14 @@ const LINKS = [
   { to: '/', label: 'PELADAS', end: true },
   { to: '/rankings', label: 'RANKINGS' },
   { to: '/players', label: 'JOGADORES' },
+  { to: '/financeiro', label: 'FINANCEIRO' },
   { to: '/perfil', label: 'MEU PERFIL' },
 ];
 
 const ADMIN_LINKS = [
   { to: '/admin/players', label: 'CADASTRO DE JOGADORES' },
   { to: '/admin/matchdays', label: 'GERENCIAMENTO DE ATAS' },
-  { to: '/admin/finance', label: 'FINANCEIRO' },
+  { to: '/admin/finance', label: 'CONTROLE FINANCEIRO' },
   { to: '/admin/whatsapp', label: 'WHATSAPP' },
   { to: '/admin/settings', label: 'CONFIGURAÇÕES' },
 ];
