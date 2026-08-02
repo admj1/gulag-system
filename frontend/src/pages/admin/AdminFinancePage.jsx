@@ -248,13 +248,14 @@ export default function AdminFinancePage() {
           <EmptyState>Nenhum mensalista cadastrado.</EmptyState>
         ) : (
           <ol className="flex flex-col gap-1">
-            {monthly.map((row, i) => (
+            {monthly.map((row) => (
               <li
                 key={row.player_id}
                 className="flex items-center justify-between gap-2 border-b border-gulag-border py-2 last:border-0"
               >
                 <span className="text-gray-200 text-sm min-w-0 truncate">
-                  {i + 1}. {row.name}
+                  {/* Numero do mensalista, como na ata; ex-mensalista nao tem */}
+                  <span className="text-gray-500">{row.mensalista_number ?? '–'}</span> {row.name}
                   {/* Quem nao e mais mensalista mas devia algo naquele mes */}
                   {!row.current_mensalista && (
                     <span className="text-[10px] text-amber-400 border border-amber-700/60 rounded px-1 ml-1">

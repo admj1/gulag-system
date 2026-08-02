@@ -33,7 +33,7 @@ async function monthlyOverview(req, res, next) {
     }
 
     const { rows } = await pool.query(
-      `SELECT p.id AS player_id, ${displayNameSql('p')} AS name,
+      `SELECT p.id AS player_id, ${displayNameSql('p')} AS name, p.mensalista_number,
               pay.id AS payment_id, pay.amount, pay.status, pay.paid_at,
               (p.player_type = 'mensalista' AND p.active) AS current_mensalista,
               p.exempt_monthly
@@ -42,7 +42,9 @@ async function monthlyOverview(req, res, next) {
          ON pay.player_id = p.id AND pay.type = 'mensalidade'
         AND pay.reference_month = $1 AND pay.reference_year = $2
        WHERE ${MONTHLY_MEMBER_SQL}
-       ORDER BY (p.player_type = 'mensalista' AND p.active) DESC, ${displayNameSql('p')}`,
+       -- Mesma ordem da ata: numeracao do mensalista, ex-mensalistas no fim
+       ORDER BY (p.player_type = 'mensalista' AND p.active) DESC,
+                p.mensalista_number NULLS LAST, ${displayNameSql('p')}`,
       [month, year]
     );
     res.json(rows);
