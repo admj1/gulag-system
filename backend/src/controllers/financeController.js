@@ -95,10 +95,9 @@ async function setMonthlyStatus(req, res, next) {
 }
 
 // Todas as mensalidades em aberto, de todos os meses, agrupadas por jogador.
-// "Em aberto" nao tem registro proprio: e a ausencia da cobranca no mes, entao
-// o mes so existe aqui se alguem deveria ter pago e nao ha linha lancada.
-// A varredura comeca no mes mais antigo com movimento e vai ate o mes atual,
-// e nunca cobra de alguem antes do cadastro dele existir.
+// Em aberto e o mes sem cobranca lancada ou com cobranca ainda nao paga.
+// A varredura vai do mes mais antigo com movimento ate o mes atual e usa a
+// mesma regra de quem entra na lista do mes, para as duas telas concordarem.
 async function openMonthlyDebts(req, res, next) {
   try {
     const settings = await getSettings();
@@ -119,23 +118,16 @@ async function openMonthlyDebts(req, res, next) {
            date_trunc('month', CURRENT_DATE)::date,
            INTERVAL '1 month'
          )::date AS mes
-       ),
-       entrada AS (
-         SELECT p.id AS player_id,
-                date_trunc('month', COALESCE(
-                  (SELECT MIN(h.start_date) FROM player_status_history h
-                   WHERE h.player_id = p.id AND h.player_type = 'mensalista'),
-                  p.created_at::date
-                ))::date AS desde
-         FROM players p
        )
+       -- Sem filtro de "desde quando e mensalista": a tela mes a mes lista todo
+       -- mensalista em qualquer mes, e um painel com regra propria nunca bateria
+       -- com ela. O que tira alguem daqui e a baixa do mes, nao a data de entrada.
        SELECT p.id AS player_id, ${displayNameSql('p')} AS name,
               (p.player_type = 'mensalista' AND p.active) AS current_mensalista,
               EXTRACT(YEAR FROM m.mes)::int AS year,
               EXTRACT(MONTH FROM m.mes)::int AS month
        FROM meses m
        CROSS JOIN players p
-       JOIN entrada e ON e.player_id = p.id
        LEFT JOIN payments pay
          ON pay.player_id = p.id AND pay.type = 'mensalidade'
         AND pay.reference_month = EXTRACT(MONTH FROM m.mes)::int
@@ -145,7 +137,7 @@ async function openMonthlyDebts(req, res, next) {
          AND NOT p.exempt_monthly
          AND (
            pay.id IS NOT NULL
-           OR (p.player_type = 'mensalista' AND p.active AND m.mes >= e.desde)
+           OR (p.player_type = 'mensalista' AND p.active)
            OR EXISTS (
              SELECT 1 FROM player_status_history h
              WHERE h.player_id = p.id AND h.player_type = 'mensalista'
