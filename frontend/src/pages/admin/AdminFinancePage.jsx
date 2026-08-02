@@ -18,6 +18,7 @@ export default function AdminFinancePage() {
   const [monthly, setMonthly] = useState([]);
   const [pending, setPending] = useState([]);
   const [debts, setDebts] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
   const [paying, setPaying] = useState(null);
 
@@ -26,8 +27,9 @@ export default function AdminFinancePage() {
   }, [month, year]);
 
   const loadPending = useCallback(() => {
-    api.get('/finance/pending').then(({ data }) => setPending(data));
-  }, []);
+    api.get('/finance/pending', { params: showHistory ? { status: 'all' } : {} })
+      .then(({ data }) => setPending(data));
+  }, [showHistory]);
 
   const loadDebts = useCallback(() => {
     api.get('/finance/monthly/open').then(({ data }) => setDebts(data));
@@ -133,6 +135,9 @@ export default function AdminFinancePage() {
   }
 
   const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - i);
+  const abertoTotal = pending.reduce((total, group) => total + group.items
+    .filter((item) => item.status === 'pending')
+    .reduce((soma, item) => soma + Number(item.amount), 0), 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -288,15 +293,31 @@ export default function AdminFinancePage() {
       </Card>
 
       <Card
-        title="Diárias e multas"
+        title={showHistory ? 'Diárias e multas — histórico' : 'Diárias e multas em aberto'}
         action={
-          <Button variant="secondary" onClick={payAllPending}>
-            Dar baixa em tudo
-          </Button>
+          <div className="flex gap-2 flex-wrap justify-end items-center">
+            {abertoTotal > 0 && (
+              <span className="text-sm font-semibold text-amber-400">
+                R$ {abertoTotal.toFixed(2)}
+              </span>
+            )}
+            <Button variant="secondary" onClick={() => setShowHistory((v) => !v)}>
+              {showHistory ? 'Ver só em aberto' : 'Ver histórico'}
+            </Button>
+            {!showHistory && (
+              <Button variant="secondary" onClick={payAllPending}>
+                Dar baixa em tudo
+              </Button>
+            )}
+          </div>
         }
       >
         {pending.length === 0 ? (
-          <EmptyState>Nenhuma cobrança lançada.</EmptyState>
+          <EmptyState>
+            {showHistory
+              ? 'Nenhuma cobrança lançada.'
+              : 'Nenhuma diária ou multa em aberto. Tudo em dia.'}
+          </EmptyState>
         ) : (
           <div className="flex flex-col gap-4">
             {pending.map((group) => (

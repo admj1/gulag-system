@@ -239,9 +239,12 @@ async function setMonthlyStatusForAll(req, res, next) {
   }
 }
 
-// Diarias e multas em aberto, agrupadas pela data da pelada
+// Diarias e multas agrupadas pela data da pelada. Por padrao mostra so o que
+// esta em aberto: depois de um tempo a lista de quitadas nao cabe na tela e o
+// que interessa no dia a dia e quem ainda deve. Com status=all vem o historico.
 async function pendingByMatchday(req, res, next) {
   try {
+    const somenteAbertas = req.query.status !== 'all';
     const { rows } = await pool.query(
       `SELECT pay.id, pay.type, pay.amount, pay.status, pay.paid_at,
               ${displayNameSql('p')} AS name, m.match_date
@@ -249,6 +252,7 @@ async function pendingByMatchday(req, res, next) {
        JOIN players p ON p.id = pay.player_id
        LEFT JOIN matchdays m ON m.id = pay.matchday_id
        WHERE pay.type IN ('diaria', 'multa')
+         ${somenteAbertas ? "AND pay.status = 'pending'" : ''}
        ORDER BY m.match_date DESC NULLS LAST, pay.type, ${displayNameSql('p')}`
     );
 
