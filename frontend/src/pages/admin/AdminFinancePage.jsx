@@ -11,6 +11,46 @@ const MONTHS = [
 
 const TYPE_LABELS = { diaria: 'diária', multa: 'multa' };
 
+const real = (valor) => `R$ ${Number(valor).toFixed(2).replace('.', ',')}`;
+
+// Texto para colar no grupo. O WhatsApp entende *negrito* entre asteriscos.
+function montarCobranca({ debts, pending }) {
+  const linhas = ['*GULAG — COBRANÇAS EM ABERTO*', ''];
+
+  const devedores = debts?.players || [];
+  linhas.push('*MENSALIDADES*');
+  if (devedores.length === 0) {
+    linhas.push('Ninguém devendo. ✅');
+  } else {
+    for (const p of devedores) {
+      const meses = p.months.map((m) => MONTHS[m.month - 1].slice(0, 3).toLowerCase()).join(', ');
+      linhas.push(`${p.name} — ${meses} (${real(p.total)})`);
+    }
+    linhas.push(`_Total: ${real(debts.total)}_`);
+  }
+
+  const grupos = (pending || [])
+    .map((g) => ({ ...g, items: g.items.filter((i) => i.status === 'pending') }))
+    .filter((g) => g.items.length > 0);
+
+  linhas.push('', '*DIÁRIAS E MULTAS*');
+  if (grupos.length === 0) {
+    linhas.push('Nada em aberto. ✅');
+  } else {
+    let total = 0;
+    for (const grupo of grupos) {
+      linhas.push(grupo.match_date ? matchDateLabel(grupo.match_date) : 'Sem data');
+      for (const item of grupo.items) {
+        total += Number(item.amount);
+        linhas.push(`  ${item.name} — ${TYPE_LABELS[item.type]} (${real(item.amount)})`);
+      }
+    }
+    linhas.push(`_Total: ${real(total)}_`);
+  }
+
+  return linhas.join('\n');
+}
+
 export default function AdminFinancePage() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -19,6 +59,7 @@ export default function AdminFinancePage() {
   const [pending, setPending] = useState([]);
   const [debts, setDebts] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [cobranca, setCobranca] = useState(null);
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
   const [paying, setPaying] = useState(null);
 
@@ -125,6 +166,16 @@ export default function AdminFinancePage() {
     }
   }
 
+  async function copiarCobranca() {
+    try {
+      await navigator.clipboard.writeText(cobranca);
+      toast.success('Texto copiado');
+    } catch {
+      // Navegador sem permissao de area de transferencia: o texto fica na tela
+      toast('Selecione o texto e copie na mão');
+    }
+  }
+
   async function undoPending(item) {
     try {
       await api.patch(`/finance/${item.id}/unpay`);
@@ -141,6 +192,40 @@ export default function AdminFinancePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button
+          variant="secondary"
+          onClick={() => setCobranca(montarCobranca({ debts, pending }))}
+        >
+          📋 Texto de cobrança
+        </Button>
+      </div>
+
+      {cobranca !== null && (
+        <Modal title="Cobrança para o grupo" onClose={() => setCobranca(null)}>
+          <p className="text-xs text-gray-500 mb-2">
+            Mensalidades e diárias separadas. Os asteriscos viram negrito no WhatsApp.
+          </p>
+          <textarea
+            readOnly
+            value={cobranca}
+            onFocus={(e) => e.target.select()}
+            className={`${inputClass} font-mono text-xs h-64 leading-relaxed`}
+          />
+          <div className="flex gap-2 justify-end mt-3 flex-wrap">
+            <Button variant="secondary" onClick={() => setCobranca(null)}>Fechar</Button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(cobranca)}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Button variant="secondary">Abrir no WhatsApp</Button>
+            </a>
+            <Button onClick={copiarCobranca}>Copiar</Button>
+          </div>
+        </Modal>
+      )}
+
       {paying && (
         <Modal title="Data do pagamento" onClose={() => setPaying(null)}>
           <p className="text-sm text-gray-300 mb-3">
