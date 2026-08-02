@@ -316,6 +316,8 @@ function PlayerRow({ player, onChange, isOwner }) {
 
 function PlayerEditor({ player, onChange, isOwner }) {
   const [uploading, setUploading] = useState(false);
+  const [changingTo, setChangingTo] = useState(null);
+  const [changeDate, setChangeDate] = useState(() => new Date().toISOString().slice(0, 10));
   const fileInput = useRef(null);
   const { register, handleSubmit, formState } = useForm({
     defaultValues: {
@@ -369,15 +371,18 @@ function PlayerEditor({ player, onChange, isOwner }) {
     }
   }
 
-  // Efeito imediato: virar mensalista ocupa a primeira vaga livre da numeracao
-  async function changeType(player_type) {
+  // Efeito imediato: virar mensalista ocupa a primeira vaga livre da numeracao.
+  // A data importa: e a partir dela que o financeiro cobra (ou para de cobrar)
+  // a mensalidade, entao vale a data real da mudanca, nao a de hoje.
+  async function changeType(player_type, start_date) {
     try {
-      const { data } = await api.patch(`/players/${player.id}/status`, { player_type });
+      const { data } = await api.patch(`/players/${player.id}/status`, { player_type, start_date });
       toast.success(
         data.mensalista_number
           ? `Agora é mensalista nº ${data.mensalista_number}`
           : `Agora é ${player_type}`
       );
+      setChangingTo(null);
       onChange();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao atualizar tipo');
@@ -517,18 +522,41 @@ function PlayerEditor({ player, onChange, isOwner }) {
           Tipo atual: <span className="text-gray-100">{player.player_type}</span>
           {player.mensalista_number && <span className="text-gray-500"> · nº {player.mensalista_number}</span>}
         </p>
+        {changingTo && (
+          <div className="border border-gulag-border rounded p-3 mb-3">
+            <p className="text-sm text-gray-300 mb-1">
+              A partir de quando {player.name} é {changingTo}?
+            </p>
+            <p className="text-xs text-gray-500 mb-2">
+              {changingTo === 'mensalista'
+                ? 'A mensalidade passa a ser cobrada a partir do mês desta data.'
+                : 'A mensalidade deixa de ser cobrada a partir do mês desta data.'}
+            </p>
+            <div className="flex gap-2 flex-wrap items-end">
+              <input
+                type="date"
+                value={changeDate}
+                onChange={(e) => setChangeDate(e.target.value)}
+                className={`${inputClass} max-w-[190px]`}
+              />
+              <Button onClick={() => changeType(changingTo, changeDate)}>Confirmar</Button>
+              <Button variant="secondary" onClick={() => setChangingTo(null)}>Cancelar</Button>
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2 flex-wrap">
           {player.player_type === 'mensalista' ? (
-            <Button variant="secondary" onClick={() => changeType('diarista')}>
+            <Button variant="secondary" onClick={() => setChangingTo('diarista')}>
               Tornar Diarista
             </Button>
           ) : (
-            <Button onClick={() => changeType('mensalista')}>
+            <Button onClick={() => setChangingTo('mensalista')}>
               Tornar Mensalista
             </Button>
           )}
           {player.player_type !== 'goleiro' && (
-            <Button variant="secondary" onClick={() => changeType('goleiro')}>
+            <Button variant="secondary" onClick={() => setChangingTo('goleiro')}>
               Tornar Goleiro
             </Button>
           )}

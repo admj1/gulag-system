@@ -1,17 +1,33 @@
 const pool = require('../config/db');
 const { displayNameSql, getSettings } = require('../config/settings');
 
-// Quem entra na cobranca de um mes. Alem do mensalista de hoje, entra quem ERA
-// mensalista naquele mes: rebaixar alguem em julho nao apaga o que ele devia em
-// maio, e sem isso a divida sumia da tela. Espera $1 = mes e $2 = ano.
-const MONTHLY_MEMBER_SQL = `
-  (p.player_type = 'mensalista' AND p.active)
-  OR EXISTS (
+// Quem entra na cobranca de um mes: quem ERA mensalista naquele mes, pelo
+// historico de promocao/rebaixamento. Assim o promovido em setembro nao nasce
+// devendo o ano inteiro e o rebaixado para de acumular a partir da saida.
+// As duas telas do financeiro usam esta mesma regra — quando so uma filtrava,
+// uma escondia o que a outra mostrava.
+// Espera $1 = mes e $2 = ano; a versao do painel troca isso por uma data.
+function monthlyMemberSql(inicioMes, fimMes) {
+  return `
+  EXISTS (
     SELECT 1 FROM player_status_history h
     WHERE h.player_id = p.id AND h.player_type = 'mensalista'
-      AND h.start_date <= (make_date($2::int, $1::int, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date
-      AND (h.end_date IS NULL OR h.end_date >= make_date($2::int, $1::int, 1))
+      AND h.start_date <= ${fimMes}
+      AND (h.end_date IS NULL OR h.end_date >= ${inicioMes})
   )
+  -- Reserva para cadastro que nunca passou pelo botao de promover
+  OR (p.player_type = 'mensalista' AND p.active AND NOT EXISTS (
+    SELECT 1 FROM player_status_history h2
+    WHERE h2.player_id = p.id AND h2.player_type = 'mensalista'
+  ))
+`;
+}
+
+const MES_INICIO = `make_date($2::int, $1::int, 1)`;
+const MES_FIM = `(make_date($2::int, $1::int, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date`;
+
+const MONTHLY_MEMBER_SQL = `
+  ${monthlyMemberSql(MES_INICIO, MES_FIM)}
   OR EXISTS (
     SELECT 1 FROM payments lancada
     WHERE lancada.player_id = p.id AND lancada.type = 'mensalidade'
@@ -119,9 +135,6 @@ async function openMonthlyDebts(req, res, next) {
            INTERVAL '1 month'
          )::date AS mes
        )
-       -- Sem filtro de "desde quando e mensalista": a tela mes a mes lista todo
-       -- mensalista em qualquer mes, e um painel com regra propria nunca bateria
-       -- com ela. O que tira alguem daqui e a baixa do mes, nao a data de entrada.
        SELECT p.id AS player_id, ${displayNameSql('p')} AS name,
               (p.player_type = 'mensalista' AND p.active) AS current_mensalista,
               EXTRACT(YEAR FROM m.mes)::int AS year,
@@ -136,14 +149,9 @@ async function openMonthlyDebts(req, res, next) {
        WHERE (pay.id IS NULL OR pay.status = 'pending')
          AND NOT p.exempt_monthly
          AND (
+           -- Cobranca ja lancada aparece mesmo fora do periodo de mensalista
            pay.id IS NOT NULL
-           OR (p.player_type = 'mensalista' AND p.active)
-           OR EXISTS (
-             SELECT 1 FROM player_status_history h
-             WHERE h.player_id = p.id AND h.player_type = 'mensalista'
-               AND h.start_date <= (m.mes + INTERVAL '1 month' - INTERVAL '1 day')::date
-               AND (h.end_date IS NULL OR h.end_date >= m.mes)
-           )
+           OR ${monthlyMemberSql('m.mes', "(m.mes + INTERVAL '1 month' - INTERVAL '1 day')::date")}
          )
        ORDER BY ${displayNameSql('p')}, m.mes`
     );
