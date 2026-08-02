@@ -1,7 +1,25 @@
 const pool = require('../config/db');
 const { displayNameSql, getSettings } = require('../config/settings');
 
-// Mensalidades de um mes/ano: lista todos os mensalistas com status pago/em aberto
+// Quem entra na cobranca de um mes. Alem do mensalista de hoje, entra quem ERA
+// mensalista naquele mes: rebaixar alguem em julho nao apaga o que ele devia em
+// maio, e sem isso a divida sumia da tela. Espera $1 = mes e $2 = ano.
+const MONTHLY_MEMBER_SQL = `
+  (p.player_type = 'mensalista' AND p.active)
+  OR EXISTS (
+    SELECT 1 FROM player_status_history h
+    WHERE h.player_id = p.id AND h.player_type = 'mensalista'
+      AND h.start_date <= (make_date($2::int, $1::int, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date
+      AND (h.end_date IS NULL OR h.end_date >= make_date($2::int, $1::int, 1))
+  )
+  OR EXISTS (
+    SELECT 1 FROM payments lancada
+    WHERE lancada.player_id = p.id AND lancada.type = 'mensalidade'
+      AND lancada.reference_month = $1 AND lancada.reference_year = $2
+  )
+`;
+
+// Mensalidades de um mes/ano: lista quem deve com status pago/em aberto
 async function monthlyOverview(req, res, next) {
   try {
     const month = Number(req.query.month);
@@ -12,13 +30,14 @@ async function monthlyOverview(req, res, next) {
 
     const { rows } = await pool.query(
       `SELECT p.id AS player_id, ${displayNameSql('p')} AS name,
-              pay.id AS payment_id, pay.amount, pay.status, pay.paid_at
+              pay.id AS payment_id, pay.amount, pay.status, pay.paid_at,
+              (p.player_type = 'mensalista' AND p.active) AS current_mensalista
        FROM players p
        LEFT JOIN payments pay
          ON pay.player_id = p.id AND pay.type = 'mensalidade'
         AND pay.reference_month = $1 AND pay.reference_year = $2
-       WHERE p.player_type = 'mensalista' AND p.active
-       ORDER BY ${displayNameSql('p')}`,
+       WHERE ${MONTHLY_MEMBER_SQL}
+       ORDER BY (p.player_type = 'mensalista' AND p.active) DESC, ${displayNameSql('p')}`,
       [month, year]
     );
     res.json(rows);
@@ -63,6 +82,59 @@ async function setMonthlyStatus(req, res, next) {
       [player_id, month, year, paid_at || null]
     );
     res.json(updated[0]);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Acerto do mes inteiro de uma vez, para bater o sistema com um controle feito
+// por fora. Depois o admin reabre no "Desfazer" quem continua devendo.
+// "Em aberto" nao tem registro proprio: e a ausencia da cobranca, como no
+// lancamento individual — por isso o caminho de reabrir e apagar a linha.
+async function setMonthlyStatusForAll(req, res, next) {
+  try {
+    const month = Number(req.body?.month);
+    const year = Number(req.body?.year);
+    const { paid, paid_at } = req.body || {};
+    if (!month || !year) return res.status(400).json({ error: 'Informe mês e ano' });
+
+    // Toda cobranca do mes pertence a alguem que aparece na tela, entao apagar
+    // por mes/ano ja corresponde ao que o admin esta vendo
+    if (!paid) {
+      const { rows } = await pool.query(
+        `DELETE FROM payments
+         WHERE type = 'mensalidade' AND reference_month = $1 AND reference_year = $2
+         RETURNING id`,
+        [month, year]
+      );
+      return res.json({ changed: rows.length });
+    }
+
+    const settings = await getSettings();
+    const { rows: created } = await pool.query(
+      `INSERT INTO payments (player_id, type, reference_month, reference_year, amount, status, paid_at)
+       SELECT p.id, 'mensalidade', $1, $2, $3, 'paid', COALESCE($4::timestamptz, now())
+       FROM players p
+       WHERE (${MONTHLY_MEMBER_SQL})
+         AND NOT EXISTS (
+           SELECT 1 FROM payments pay
+           WHERE pay.player_id = p.id AND pay.type = 'mensalidade'
+             AND pay.reference_month = $1 AND pay.reference_year = $2
+         )
+       RETURNING id`,
+      [month, year, settings.monthly_fee, paid_at || null]
+    );
+
+    // Quem ja tinha cobranca lancada e continuava em aberto
+    const { rows: updated } = await pool.query(
+      `UPDATE payments SET status = 'paid', paid_at = COALESCE($3::timestamptz, now())
+       WHERE type = 'mensalidade' AND reference_month = $1 AND reference_year = $2
+         AND status <> 'paid'
+       RETURNING id`,
+      [month, year, paid_at || null]
+    );
+
+    res.json({ changed: created.length + updated.length });
   } catch (err) {
     next(err);
   }
@@ -126,6 +198,24 @@ async function markPaid(req, res, next) {
   }
 }
 
+// Baixa em massa das diarias e multas em aberto. Serve para acertar o sistema
+// com um controle feito por fora (planilha): quita tudo de uma vez e depois o
+// admin reabre com "Desfazer" as poucas que continuam devendo.
+// Mensalidade fica de fora de proposito — ela tem a propria tela, por mes.
+async function payAllPending(req, res, next) {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE payments SET status = 'paid', paid_at = COALESCE($1::timestamptz, now())
+       WHERE type IN ('diaria', 'multa') AND status = 'pending'
+       RETURNING id`,
+      [req.body?.paid_at || null]
+    );
+    res.json({ paid: rows.length });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function markPending(req, res, next) {
   try {
     const { rows } = await pool.query(
@@ -140,5 +230,6 @@ async function markPending(req, res, next) {
 }
 
 module.exports = {
-  monthlyOverview, setMonthlyStatus, pendingByMatchday, historyByPlayer, markPaid, markPending,
+  monthlyOverview, setMonthlyStatus, setMonthlyStatusForAll, pendingByMatchday,
+  historyByPlayer, markPaid, markPending, payAllPending,
 };

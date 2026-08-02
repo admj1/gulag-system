@@ -40,6 +40,16 @@ export default function AdminFinancePage() {
   async function confirmPayment() {
     const paid_at = new Date(`${paidAt}T12:00:00`).toISOString();
     try {
+      if (paying.kind === 'monthly-all') {
+        const { data } = await api.post('/finance/monthly/all', {
+          month, year, paid: true, paid_at,
+        });
+        loadMonthly();
+        setPaying(null);
+        toast.success(`${data.changed} mensalidade(s) quitada(s)`);
+        return;
+      }
+
       if (paying.kind === 'monthly') {
         await api.post('/finance/monthly', {
           player_id: paying.row.player_id,
@@ -57,12 +67,49 @@ export default function AdminFinancePage() {
     }
   }
 
+  // Mês inteiro de volta para "em aberto": util quando ninguem pagou ainda
+  async function reopenMonth() {
+    if (!window.confirm(
+      `Marcar TODAS as mensalidades de ${MONTHS[month - 1]}/${year} como em aberto?`
+    )) return;
+    try {
+      const { data } = await api.post('/finance/monthly/all', { month, year, paid: false });
+      toast.success(`${data.changed} mensalidade(s) reaberta(s)`);
+      loadMonthly();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao reabrir o mês');
+    }
+  }
+
   async function undoMonthly(row) {
     try {
       await api.post('/finance/monthly', { player_id: row.player_id, month, year, paid: false });
       loadMonthly();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao desfazer');
+    }
+  }
+
+  // Acerto com um controle feito por fora: quita tudo e depois o admin reabre
+  // com "Desfazer" só quem ainda deve
+  async function payAllPending() {
+    const abertas = pending.reduce(
+      (total, group) => total + group.items.filter((i) => i.status === 'pending').length,
+      0
+    );
+    if (abertas === 0) return toast('Não há diárias ou multas em aberto.');
+    if (!window.confirm(
+      `Dar baixa em ${abertas} diária(s)/multa(s) em aberto?\n\n`
+      + 'Depois é só usar "Desfazer" nas que continuam devendo. '
+      + 'Mensalidades não são afetadas.'
+    )) return;
+
+    try {
+      const { data } = await api.post('/finance/pending/pay-all');
+      toast.success(`${data.paid} cobrança(s) quitada(s)`);
+      loadPending();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao dar baixa');
     }
   }
 
@@ -82,9 +129,11 @@ export default function AdminFinancePage() {
       {paying && (
         <Modal title="Data do pagamento" onClose={() => setPaying(null)}>
           <p className="text-sm text-gray-300 mb-3">
-            {paying.kind === 'monthly'
-              ? `Mensalidade de ${paying.row.name}`
-              : `${paying.item.name} — ${TYPE_LABELS[paying.item.type]}`}
+            {paying.kind === 'monthly-all'
+              ? `Todas as mensalidades de ${MONTHS[month - 1]}/${year}`
+              : paying.kind === 'monthly'
+                ? `Mensalidade de ${paying.row.name}`
+                : `${paying.item.name} — ${TYPE_LABELS[paying.item.type]}`}
           </p>
           <Field label="Quando o pagamento foi feito">
             <input
@@ -101,7 +150,19 @@ export default function AdminFinancePage() {
         </Modal>
       )}
 
-      <Card title="Mensalidades">
+      <Card
+        title="Mensalidades"
+        action={
+          <div className="flex gap-2 flex-wrap justify-end">
+            <Button variant="secondary" onClick={() => askPaymentDate({ kind: 'monthly-all' })}>
+              Quitar o mês
+            </Button>
+            <Button variant="secondary" onClick={reopenMonth}>
+              Reabrir o mês
+            </Button>
+          </div>
+        }
+      >
         <div className="grid gap-3 sm:grid-cols-2 mb-4">
           <Field label="Mês">
             <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={inputClass}>
@@ -126,6 +187,12 @@ export default function AdminFinancePage() {
               >
                 <span className="text-gray-200 text-sm min-w-0 truncate">
                   {i + 1}. {row.name}
+                  {/* Quem nao e mais mensalista mas devia algo naquele mes */}
+                  {!row.current_mensalista && (
+                    <span className="text-[10px] text-amber-400 border border-amber-700/60 rounded px-1 ml-1">
+                      ex-mensalista
+                    </span>
+                  )}
                 </span>
                 <span className="flex items-center gap-2 shrink-0">
                   {row.status === 'paid' ? (
@@ -150,7 +217,14 @@ export default function AdminFinancePage() {
         )}
       </Card>
 
-      <Card title="Diárias e multas">
+      <Card
+        title="Diárias e multas"
+        action={
+          <Button variant="secondary" onClick={payAllPending}>
+            Dar baixa em tudo
+          </Button>
+        }
+      >
         {pending.length === 0 ? (
           <EmptyState>Nenhuma cobrança lançada.</EmptyState>
         ) : (
