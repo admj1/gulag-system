@@ -138,10 +138,12 @@ async function openMonthlyDebts(req, res, next) {
          ON pay.player_id = p.id AND pay.type = 'mensalidade'
         AND pay.reference_month = EXTRACT(MONTH FROM m.mes)::int
         AND pay.reference_year = EXTRACT(YEAR FROM m.mes)::int
-       WHERE pay.id IS NULL
+       -- Sem registro nenhum ou com cobranca lancada e ainda nao paga
+       WHERE (pay.id IS NULL OR pay.status = 'pending')
          AND NOT p.exempt_monthly
          AND (
-           (p.player_type = 'mensalista' AND p.active AND m.mes >= e.desde)
+           pay.id IS NOT NULL
+           OR (p.player_type = 'mensalista' AND p.active AND m.mes >= e.desde)
            OR EXISTS (
              SELECT 1 FROM player_status_history h
              WHERE h.player_id = p.id AND h.player_type = 'mensalista'
