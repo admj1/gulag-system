@@ -37,13 +37,22 @@ async function resolveSeason(client, matchDate) {
   return rows[0].id;
 }
 
-// Admin: previa do elenco padrao da ata (mensalistas numerados + goleiros)
+// Quem entra na ata sozinho: todo mensalista e o goleiro marcado como fixo.
+// Goleiro nao marcado coloca o nome como avulso, igual a um diarista.
+const ROSTER_SQL = `
+  active AND NOT blocked AND (
+    player_type = 'mensalista'
+    OR (player_type = 'goleiro' AND auto_roster)
+  )
+`;
+
+// Admin: previa do elenco padrao da ata (mensalistas numerados + goleiros fixos)
 async function rosterPreview(req, res, next) {
   try {
     const { rows } = await pool.query(
       `SELECT id, ${displayNameSql()} AS name, player_type, stars, mensalista_number
        FROM players
-       WHERE player_type IN ('mensalista', 'goleiro') AND active AND NOT blocked
+       WHERE ${ROSTER_SQL}
        ORDER BY player_type, mensalista_number NULLS LAST, ${displayNameSql()}`
     );
     res.json(rows);
@@ -77,11 +86,11 @@ async function createFromRoster(req, res, next) {
     );
     const matchday = matchdayRows[0];
 
-    // Mensalistas e goleiros ja entram relacionados; ficam verdes conforme confirmam
+    // Mensalistas e goleiros fixos ja entram relacionados; ficam verdes conforme confirmam
     await client.query(
       `INSERT INTO confirmations (matchday_id, player_id, status)
        SELECT $1, id, $2 FROM players
-       WHERE player_type IN ('mensalista', 'goleiro') AND active AND NOT blocked
+       WHERE ${ROSTER_SQL}
        ON CONFLICT (matchday_id, player_id) DO NOTHING`,
       [matchday.id, confirm_all ? 'confirmed' : 'pending']
     );

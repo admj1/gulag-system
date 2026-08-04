@@ -197,9 +197,12 @@ function AtaModal({ onClose, onCreated }) {
         </Field>
 
         <p className="text-xs text-gray-500">
-          Os {mensalistas.length} mensalistas e {goleiros.length} goleiros já entram na ata.
-          Cada um fica verde ao confirmar; quem não confirmar até o fechamento libera a vaga
-          para os diaristas, por ordem de inscrição.
+          Os {mensalistas.length} mensalistas
+          {goleiros.length > 0
+            ? ` e ${goleiros.length} goleiro(s) fixo(s) já entram`
+            : ' já entram'} na ata. Cada um fica verde ao confirmar; quem não confirmar até o
+          fechamento libera a vaga para os diaristas, por ordem de inscrição. Os demais goleiros
+          entram colocando o nome na lista, como avulsos.
         </p>
 
         <div>

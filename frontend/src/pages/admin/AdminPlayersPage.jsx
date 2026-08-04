@@ -330,6 +330,7 @@ function PlayerEditor({ player, onChange, isOwner }) {
       stars: player.stars,
       mensalista_number: player.mensalista_number ?? '',
       exempt_monthly: !!player.exempt_monthly,
+      auto_roster: !!player.auto_roster,
       password: '',
     },
   });
@@ -512,6 +513,20 @@ function PlayerEditor({ player, onChange, isOwner }) {
             </span>
           </span>
         </label>
+
+        {/* Mensalista sempre entra; a escolha so existe para goleiro */}
+        {player.player_type === 'goleiro' && (
+          <label className="flex items-start gap-2 text-sm text-gray-300 sm:col-span-2">
+            <input type="checkbox" {...register('auto_roster')} className="w-4 h-4 mt-0.5" />
+            <span>
+              Goleiro fixo
+              <span className="block text-xs text-gray-500">
+                Entra na ata automaticamente, como os mensalistas, e sem gerar cobrança. Goleiro
+                não marcado precisa colocar o nome na lista, como um avulso.
+              </span>
+            </span>
+          </label>
+        )}
         <div className="sm:col-span-2">
           <Button disabled={formState.isSubmitting}>Salvar cadastro</Button>
         </div>
