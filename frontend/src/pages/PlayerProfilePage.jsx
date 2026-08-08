@@ -43,11 +43,7 @@ export default function PlayerProfilePage() {
       {player.player_type === 'goleiro' && (
         <Card title="Estatísticas de goleiro">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <Stat
-              label="Partidas jogadas"
-              value={Number(goalkeeperTotals.wins) + Number(goalkeeperTotals.draws)
-                + Number(goalkeeperTotals.losses)}
-            />
+            <Stat label="Peladas jogadas" value={goalkeeperTotals.peladas_jogadas} />
             <Stat label="Vitórias" value={goalkeeperTotals.wins} />
             <Stat label="Empates" value={goalkeeperTotals.draws} />
             <Stat label="Derrotas" value={goalkeeperTotals.losses} />

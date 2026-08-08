@@ -18,6 +18,7 @@ async function playerSummary(id) {
 
   const { rows: goalkeeperTotals } = await pool.query(
     `SELECT
+       COUNT(*) AS peladas_jogadas,
        COALESCE(SUM(wins), 0) AS wins,
        COALESCE(SUM(losses), 0) AS losses,
        COALESCE(SUM(draws), 0) AS draws,
@@ -435,17 +436,33 @@ async function curiosities(req, res, next) {
         maisVezesNoTopo('assists'),
       ]);
 
+    // Maior presenca: dias de pelada, nao soma de partidas. UNION (e nao ALL)
+    // porque quem jogou na linha e no gol no mesmo dia esteve la uma vez so.
+    const { rows: presencas } = await pool.query(
+      `WITH presencas AS (
+         SELECT player_id, matchday_id FROM player_match_stats WHERE NOT absent
+         UNION
+         SELECT player_id, matchday_id FROM goalkeeper_match_stats
+       ),
+       contagem AS (
+         SELECT player_id, COUNT(*)::int AS vezes FROM presencas GROUP BY player_id
+       )
+       SELECT c.vezes AS value, ${displayNameSql('p')} AS name, p.id
+       FROM contagem c JOIN players p ON p.id = c.player_id
+       WHERE c.vezes = (SELECT MAX(vezes) FROM contagem)
+       ORDER BY ${displayNameSql('p')}`
+    );
+
     // Mais vezes no melhor time do dia
+    // Goleiro fica de fora desta: sao dois ou tres disputando contra vinte
+    // jogadores de linha, entao ele lideraria por falta de concorrencia.
+    // No perfil dele o goleiro do dia continua contando.
     const { rows: campeoes } = await pool.query(
       `WITH campeoes AS (${BEST_TEAM_SQL}),
-       goleiros AS (${GOLEIRO_DO_DIA_SQL}),
        contagem AS (
-         SELECT player_id, COUNT(*)::int AS vezes FROM (
-           SELECT tp.player_id FROM campeoes c JOIN team_players tp ON tp.team_id = c.id
-           UNION ALL
-           SELECT player_id FROM goleiros
-         ) juntos
-         GROUP BY player_id
+         SELECT tp.player_id AS player_id, COUNT(*)::int AS vezes
+         FROM campeoes c JOIN team_players tp ON tp.team_id = c.id
+         GROUP BY tp.player_id
        )
        SELECT c.vezes AS value, ${displayNameSql('p')} AS name, p.id
        FROM contagem c JOIN players p ON p.id = c.player_id
@@ -460,6 +477,7 @@ async function curiosities(req, res, next) {
       bestTeamTitles: campeoes.length ? { value: campeoes[0].value, entries: campeoes } : null,
       topScorerTitles,
       topAssistTitles,
+      mostPresent: presencas.length ? { value: presencas[0].value, entries: presencas } : null,
     });
   } catch (err) {
     next(err);

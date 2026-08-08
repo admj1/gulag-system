@@ -118,6 +118,7 @@ function Curiosities({ data }) {
     { label: 'Mais vezes no time da pelada', item: data.bestTeamTitles, unidade: 'vezes' },
     { label: 'Mais vezes artilheiro do dia', item: data.topScorerTitles, unidade: 'vezes' },
     { label: 'Mais vezes garçom do dia', item: data.topAssistTitles, unidade: 'vezes' },
+    { label: 'Maior presença', item: data.mostPresent, unidade: 'peladas' },
   ];
 
   return (
