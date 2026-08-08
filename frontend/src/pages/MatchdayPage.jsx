@@ -149,10 +149,25 @@ function destaquesDoDia(playerStats, campo) {
   return new Set(playerStats.filter((s) => s[campo] === melhor).map((s) => s.player_id));
 }
 
+// Goleiro do dia: mais vitorias, desempate por menos derrotas e depois por mais
+// penaltis defendidos. Vale como time da pelada nas estatisticas coletivas.
+function goleirosDoDia(goalkeeperStats) {
+  const jogaram = goalkeeperStats.filter((s) => s.wins > 0);
+  if (jogaram.length === 0) return new Set();
+
+  const melhor = [...jogaram].sort((a, b) =>
+    b.wins - a.wins || a.losses - b.losses || b.penalties_saved - a.penalties_saved)[0];
+  const empatados = jogaram.filter((s) => s.wins === melhor.wins
+    && s.losses === melhor.losses && s.penalties_saved === melhor.penalties_saved);
+
+  return new Set(empatados.map((s) => s.player_id));
+}
+
 // Depois da pelada realizada e a sumula que interessa, entao ela nasce aberta.
 function SummarySection({ teams, summary, nameById, champion }) {
   const artilheiros = destaquesDoDia(summary.playerStats, 'goals');
   const garcons = destaquesDoDia(summary.playerStats, 'assists');
+  const goleiros = goleirosDoDia(summary.goalkeeperStats);
 
   return (
     <Section
@@ -204,7 +219,13 @@ function SummarySection({ teams, summary, nameById, champion }) {
                   <tbody>
                     {stats.map((s) => (
                       <tr key={s.id} className="text-gray-200 border-t border-gulag-border">
-                        <td className="py-1 pr-2 truncate">
+                        <td
+                          className={`py-1 pr-2 truncate ${
+                            artilheiros.has(s.player_id) || garcons.has(s.player_id)
+                              ? 'text-gulag-cyan font-semibold'
+                              : ''
+                          }`}
+                        >
                           {nameById[s.player_id] || `#${s.player_id}`}
                           {artilheiros.has(s.player_id) && (
                             <span title="artilheiro do dia"> ⚽</span>
@@ -246,7 +267,14 @@ function SummarySection({ teams, summary, nameById, champion }) {
               <tbody>
                 {summary.goalkeeperStats.map((s) => (
                   <tr key={s.id} className="text-gray-200 border-t border-gulag-border">
-                    <td className="py-1 pr-2 truncate">{nameById[s.player_id] || `#${s.player_id}`}</td>
+                    <td
+                      className={`py-1 pr-2 truncate ${
+                        goleiros.has(s.player_id) ? 'text-gulag-cyan font-semibold' : ''
+                      }`}
+                    >
+                      {nameById[s.player_id] || `#${s.player_id}`}
+                      {goleiros.has(s.player_id) && <span title="goleiro do dia"> 🧤</span>}
+                    </td>
                     <td className="tabular-nums">{s.wins}</td>
                     <td className="tabular-nums">{s.losses}</td>
                     <td className="tabular-nums">{s.draws}</td>

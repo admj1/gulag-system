@@ -43,6 +43,11 @@ export default function PlayerProfilePage() {
       {player.player_type === 'goleiro' && (
         <Card title="Estatísticas de goleiro">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <Stat
+              label="Partidas jogadas"
+              value={Number(goalkeeperTotals.wins) + Number(goalkeeperTotals.draws)
+                + Number(goalkeeperTotals.losses)}
+            />
             <Stat label="Vitórias" value={goalkeeperTotals.wins} />
             <Stat label="Empates" value={goalkeeperTotals.draws} />
             <Stat label="Derrotas" value={goalkeeperTotals.losses} />
@@ -55,7 +60,7 @@ export default function PlayerProfilePage() {
         </Card>
       )}
 
-      <Card title="Estatísticas individuais">
+      <Card title="Estatísticas na linha">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Stat label="Peladas jogadas" value={totals.peladas_jogadas} />
           <Stat label="Gols" value={totals.goals} />
@@ -77,7 +82,11 @@ export default function PlayerProfilePage() {
 
       <Card title="Estatísticas coletivas">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat label="Times da pelada" value={collective.bestTeamCount} hint="melhor time do dia" />
+          <Stat
+            label="Times da pelada"
+            value={collective.bestTeamCount}
+            hint="melhor time ou goleiro do dia"
+          />
           <Stat label="Vitórias" value={collective.wins} />
           <Stat label="Empates" value={collective.draws} />
           <Stat label="Derrotas" value={collective.losses} />

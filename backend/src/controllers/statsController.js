@@ -88,6 +88,23 @@ const BEST_TEAM_SQL = `
   WHERE (SELECT COUNT(*) FROM campeoes c2 WHERE c2.matchday_id = camp.matchday_id) = 1
 `;
 
+// Goleiro do dia: mais vitorias na pelada; empate desempata por menos derrotas
+// e depois por mais penaltis defendidos. RANK deixa os empatados todos em 1o.
+// Vale como "time da pelada": o goleiro nao e alocado em time nenhum, entao sem
+// isso ele nunca pontuaria no coletivo.
+const GOLEIRO_DO_DIA_SQL = `
+  SELECT matchday_id, player_id FROM (
+    SELECT matchday_id, player_id, wins,
+           RANK() OVER (
+             PARTITION BY matchday_id
+             ORDER BY wins DESC, losses ASC, penalties_saved DESC
+           ) AS posicao
+    FROM goalkeeper_match_stats
+    WHERE wins + draws + losses > 0
+  ) ranqueado
+  WHERE posicao = 1 AND wins > 0
+`;
+
 async function collectiveTotals(playerId) {
   const { rows: totals } = await pool.query(
     `SELECT
@@ -102,11 +119,13 @@ async function collectiveTotals(playerId) {
   );
 
   const { rows: best } = await pool.query(
-    `WITH campeoes AS (${BEST_TEAM_SQL})
-     SELECT COUNT(*)::int AS vezes
-     FROM campeoes c
-     JOIN team_players tp ON tp.team_id = c.id
-     WHERE tp.player_id = $1`,
+    `WITH campeoes AS (${BEST_TEAM_SQL}), goleiros AS (${GOLEIRO_DO_DIA_SQL})
+     SELECT (
+       (SELECT COUNT(*) FROM campeoes c
+        JOIN team_players tp ON tp.team_id = c.id
+        WHERE tp.player_id = $1)
+       + (SELECT COUNT(*) FROM goleiros g WHERE g.player_id = $1)
+     )::int AS vezes`,
     [playerId]
   );
 
@@ -419,10 +438,14 @@ async function curiosities(req, res, next) {
     // Mais vezes no melhor time do dia
     const { rows: campeoes } = await pool.query(
       `WITH campeoes AS (${BEST_TEAM_SQL}),
+       goleiros AS (${GOLEIRO_DO_DIA_SQL}),
        contagem AS (
-         SELECT tp.player_id, COUNT(*)::int AS vezes
-         FROM campeoes c JOIN team_players tp ON tp.team_id = c.id
-         GROUP BY tp.player_id
+         SELECT player_id, COUNT(*)::int AS vezes FROM (
+           SELECT tp.player_id FROM campeoes c JOIN team_players tp ON tp.team_id = c.id
+           UNION ALL
+           SELECT player_id FROM goleiros
+         ) juntos
+         GROUP BY player_id
        )
        SELECT c.vezes AS value, ${displayNameSql('p')} AS name, p.id
        FROM contagem c JOIN players p ON p.id = c.player_id
