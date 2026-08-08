@@ -471,7 +471,12 @@ async function curiosities(req, res, next) {
       `WITH campeoes AS (${BEST_TEAM_SQL}),
        contagem AS (
          SELECT tp.player_id AS player_id, COUNT(*)::int AS vezes
-         FROM campeoes c JOIN team_players tp ON tp.team_id = c.id
+         FROM campeoes c
+         JOIN team_players tp ON tp.team_id = c.id
+         -- Mesma regra do perfil: quem faltou nao leva o time da pelada daquele dia
+         LEFT JOIN player_match_stats s
+           ON s.matchday_id = c.matchday_id AND s.player_id = tp.player_id
+         WHERE COALESCE(s.absent, FALSE) = FALSE
          GROUP BY tp.player_id
        )
        SELECT c.vezes AS value, ${displayNameSql('p')} AS name, p.id
