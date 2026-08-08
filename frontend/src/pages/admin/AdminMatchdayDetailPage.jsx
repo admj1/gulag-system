@@ -163,6 +163,17 @@ export default function AdminMatchdayDetailPage() {
     }
   }
 
+  async function renameTeam(team) {
+    const name = window.prompt('Nome do time:', team.name);
+    if (name === null || !name.trim()) return;
+    try {
+      await api.patch(`/matchdays/${id}/teams/${team.id}`, { name: name.trim() });
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao renomear o time');
+    }
+  }
+
   async function closeList() {
     try {
       const { data } = await api.post(`/matchdays/${id}/close`);
@@ -456,6 +467,13 @@ export default function AdminMatchdayDetailPage() {
               title={
                 <span className="flex items-center gap-2">
                   {team.name}
+                  <button
+                    onClick={() => renameTeam(team)}
+                    title="Renomear o time"
+                    className="text-xs text-gray-500 hover:text-gulag-cyan"
+                  >
+                    ✎
+                  </button>
                   {isBest && (
                     <span className="text-[10px] uppercase tracking-wide bg-gulag-cyan text-black rounded px-1.5 py-0.5">
                       🏆 melhor time do dia

@@ -364,6 +364,85 @@ function periodFilter({ month, year, seasonId }, startIndex) {
   return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', params };
 }
 
+// Recordes e curiosidades de todo o periodo registrado. Empate entra todo
+// mundo: se dois fizeram 7 gols no mesmo dia, os dois sao o recorde.
+async function curiosities(req, res, next) {
+  try {
+    // Recorde num unico dia, para a coluna informada
+    const recordeDoDia = async (expressao) => {
+      const { rows } = await pool.query(
+        `WITH valores AS (
+           SELECT s.player_id, ${expressao} AS valor, m.match_date
+           FROM player_match_stats s
+           JOIN matchdays m ON m.id = s.matchday_id
+           WHERE NOT s.absent
+         )
+         SELECT v.valor::int AS value, v.match_date, ${displayNameSql('p')} AS name, p.id
+         FROM valores v
+         JOIN players p ON p.id = v.player_id
+         WHERE v.valor = (SELECT MAX(valor) FROM valores) AND v.valor > 0
+         ORDER BY v.match_date DESC, ${displayNameSql('p')}`
+      );
+      return rows.length ? { value: rows[0].value, entries: rows } : null;
+    };
+
+    // Quem mais vezes ficou no topo do dia (artilheiro/garcom)
+    const maisVezesNoTopo = async (coluna) => {
+      const { rows } = await pool.query(
+        `WITH por_dia AS (
+           SELECT player_id, ${coluna} AS valor,
+                  MAX(${coluna}) OVER (PARTITION BY matchday_id) AS melhor
+           FROM player_match_stats WHERE NOT absent
+         ),
+         contagem AS (
+           SELECT player_id, COUNT(*)::int AS vezes
+           FROM por_dia WHERE valor > 0 AND valor = melhor
+           GROUP BY player_id
+         )
+         SELECT c.vezes AS value, ${displayNameSql('p')} AS name, p.id
+         FROM contagem c JOIN players p ON p.id = c.player_id
+         WHERE c.vezes = (SELECT MAX(vezes) FROM contagem)
+         ORDER BY ${displayNameSql('p')}`
+      );
+      return rows.length ? { value: rows[0].value, entries: rows } : null;
+    };
+
+    const [topScorerDay, topAssistDay, topCardsDay, topScorerTitles, topAssistTitles] =
+      await Promise.all([
+        recordeDoDia('s.goals'),
+        recordeDoDia('s.assists'),
+        recordeDoDia('s.yellow_cards + s.blue_cards + s.red_cards'),
+        maisVezesNoTopo('goals'),
+        maisVezesNoTopo('assists'),
+      ]);
+
+    // Mais vezes no melhor time do dia
+    const { rows: campeoes } = await pool.query(
+      `WITH campeoes AS (${BEST_TEAM_SQL}),
+       contagem AS (
+         SELECT tp.player_id, COUNT(*)::int AS vezes
+         FROM campeoes c JOIN team_players tp ON tp.team_id = c.id
+         GROUP BY tp.player_id
+       )
+       SELECT c.vezes AS value, ${displayNameSql('p')} AS name, p.id
+       FROM contagem c JOIN players p ON p.id = c.player_id
+       WHERE c.vezes = (SELECT MAX(vezes) FROM contagem)
+       ORDER BY ${displayNameSql('p')}`
+    );
+
+    res.json({
+      topScorerDay,
+      topAssistDay,
+      topCardsDay,
+      bestTeamTitles: campeoes.length ? { value: campeoes[0].value, entries: campeoes } : null,
+      topScorerTitles,
+      topAssistTitles,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Periodos que realmente tem sumula lancada, para o filtro dos rankings nao
 // oferecer mes e ano vazios.
 async function rankingPeriods(req, res, next) {
@@ -436,5 +515,5 @@ async function rankings(req, res, next) {
 }
 
 module.exports = {
-  playerProfile, rankings, rankingPeriods, comparePlayers, starSuggestions,
+  playerProfile, rankings, rankingPeriods, curiosities, comparePlayers, starSuggestions,
 };

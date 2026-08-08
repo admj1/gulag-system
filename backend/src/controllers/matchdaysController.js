@@ -602,7 +602,7 @@ async function drawTeams(req, res, next) {
     const teams = Math.max(2, numberOfTeams || 2);
 
     const { rows: players } = await pool.query(
-      `SELECT p.id, p.stars FROM confirmations c
+      `SELECT p.id, p.stars, ${displayNameSql('p')} AS name FROM confirmations c
        JOIN players p ON p.id = c.player_id
        WHERE c.matchday_id = $1 AND c.status = 'confirmed' AND p.player_type != 'goleiro'
        ORDER BY p.stars DESC`,
@@ -612,20 +612,23 @@ async function drawTeams(req, res, next) {
     const buckets = Array.from({ length: teams }, () => ({ players: [], totalStars: 0 }));
     for (const player of players) {
       const target = buckets.reduce((min, b) => (b.totalStars < min.totalStars ? b : min), buckets[0]);
-      target.players.push(player.id);
+      target.players.push(player);
       target.totalStars += Number(player.stars);
     }
 
     await pool.query('DELETE FROM teams WHERE matchday_id = $1', [req.params.id]);
     const created = [];
     for (let i = 0; i < buckets.length; i += 1) {
+      // O time leva o nome de quem foi sorteado primeiro nele (o de mais
+      // estrelas), como na pelada: "o time do Fulano". O admin pode trocar.
+      const nome = buckets[i].players[0]?.name || `Time ${String.fromCharCode(65 + i)}`;
       const { rows } = await pool.query(
         `INSERT INTO teams (matchday_id, name) VALUES ($1, $2) RETURNING id, name`,
-        [req.params.id, `Time ${String.fromCharCode(65 + i)}`]
+        [req.params.id, nome.slice(0, 40)]
       );
       const team = rows[0];
-      for (const playerId of buckets[i].players) {
-        await pool.query('INSERT INTO team_players (team_id, player_id) VALUES ($1, $2)', [team.id, playerId]);
+      for (const player of buckets[i].players) {
+        await pool.query('INSERT INTO team_players (team_id, player_id) VALUES ($1, $2)', [team.id, player.id]);
       }
       created.push({ ...team, players: buckets[i].players, totalStars: buckets[i].totalStars });
     }
@@ -653,6 +656,24 @@ async function getTeams(req, res, next) {
       players: teamPlayers.filter((p) => p.team_id === t.id),
     }));
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Admin: troca o nome do time. O sorteio batiza com o nome de um jogador,
+// mas na pelada o time costuma ser conhecido por outro.
+async function renameTeam(req, res, next) {
+  try {
+    const name = String(req.body?.name || '').trim().slice(0, 40);
+    if (!name) return res.status(400).json({ error: 'Informe o nome do time' });
+
+    const { rows } = await pool.query(
+      'UPDATE teams SET name = $1 WHERE id = $2 AND matchday_id = $3 RETURNING id, name',
+      [name, req.params.teamId, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Time não encontrado nesta pelada' });
+    res.json(rows[0]);
   } catch (err) {
     next(err);
   }
@@ -1000,5 +1021,5 @@ module.exports = {
   create, list, getById, getConfirmations, confirm, closeList, closeMatchday,
   drawTeams, submitSummary, getSummary, getTeams, moveTeamPlayer, rosterPreview, createFromRoster, remove,
   setConfirmation, removeConfirmation, invitePlayer, cancelOwnConfirmation,
-  declineOwn, createRetroactive, getLive, pushEvents, notifyMatchday,
+  declineOwn, createRetroactive, getLive, pushEvents, notifyMatchday, renameTeam,
 };

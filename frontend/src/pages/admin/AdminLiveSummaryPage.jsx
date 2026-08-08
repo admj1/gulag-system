@@ -107,14 +107,18 @@ export default function AdminLiveSummaryPage() {
     return Math.max(0, (Number(saved) || 0) + pendingDelta);
   }, [serverStats, serverTeams, pendingDeltas]);
 
-  function register(target, stat) {
+  function register(target, stat, delta = 1) {
+    // Nao deixa descer abaixo de zero: o servidor tambem trava, mas assim a
+    // tela nao mostra por um instante um numero que nunca vai existir
+    if (delta < 0 && total(target, stat) === 0) return;
+
     push({
       client_id: newClientId(),
       ...(target.type === 'team' ? { team_id: target.id } : { player_id: target.id }),
       stat,
-      delta: 1,
+      delta,
     });
-    setHistory((h) => [...h, { target, stat }]);
+    setHistory((h) => [...h, { target, stat, delta }]);
     navigator.vibrate?.(15);
 
     clearTimeout(flashTimer.current);
@@ -129,7 +133,7 @@ export default function AdminLiveSummaryPage() {
       client_id: newClientId(),
       ...(last.target.type === 'team' ? { team_id: last.target.id } : { player_id: last.target.id }),
       stat: last.stat,
-      delta: -1,
+      delta: -(last.delta ?? 1), // desfazer uma correcao devolve o lancamento
     });
     setHistory((h) => h.slice(0, -1));
     navigator.vibrate?.(30);
@@ -301,23 +305,22 @@ function ResultRow({ target, badge, total, flash, onRegister }) {
   const hit = flash.startsWith(`${target.type}:${target.id}:`);
 
   return (
-    <li className="flex items-center gap-2 py-2 border-b border-gulag-border last:border-0">
-      <span className={`min-w-0 flex-1 truncate text-sm ${hit ? 'text-gulag-cyan' : 'text-gray-100'}`}>
+    <li className="py-2 border-b border-gulag-border last:border-0">
+      <span className={`block truncate text-sm mb-1 ${hit ? 'text-gulag-cyan' : 'text-gray-100'}`}>
         {badge && <span className="mr-1">{badge}</span>}
         {target.name}
       </span>
-      <div className="flex gap-1 shrink-0">
+      <div className="grid grid-cols-3 gap-1">
         {RESULT_ACTIONS.map((a) => (
-          <button
+          <Stepper
             key={a.stat}
-            onClick={() => onRegister(target, a.stat)}
-            aria-label={`${a.label} de ${target.name}`}
-            className="min-w-[54px] rounded border border-gulag-border bg-gulag-surface-2 py-2 text-sm flex items-center justify-center gap-1 active:bg-gulag-cyan/15"
-            style={{ touchAction: 'manipulation' }}
-          >
-            <span className={`font-semibold ${a.color}`}>{a.short}</span>
-            <span className="tabular-nums text-xs text-gray-400">{total(target, a.stat)}</span>
-          </button>
+            label={a.label}
+            icon={<span className={`font-semibold ${a.color}`}>{a.short}</span>}
+            value={total(target, a.stat)}
+            onChange={(delta) => onRegister(target, a.stat, delta)}
+            name={target.name}
+            className="rounded border border-gulag-border bg-gulag-surface-2"
+          />
         ))}
       </div>
     </li>
@@ -354,42 +357,74 @@ function PlayerTile({ player, actions, showResults = false, total, flash, onRegi
       </button>
 
       {showResults && (
-        <div className="flex border-t border-gulag-border divide-x divide-gulag-border">
+        <div className="grid grid-cols-3 border-t border-gulag-border">
           {RESULT_ACTIONS.map((a) => (
-            <button
+            <Stepper
               key={a.stat}
-              onClick={() => onRegister(target, a.stat)}
-              title={a.label}
-              aria-label={`${a.label} de ${player.name}`}
-              className="flex-1 py-3 text-sm active:bg-gulag-cyan/15 flex items-center justify-center gap-1"
-              style={{ touchAction: 'manipulation' }}
-            >
-              <span className={`font-semibold ${a.color}`}>{a.short}</span>
-              <span className="tabular-nums text-xs text-gray-400">{total(target, a.stat)}</span>
-            </button>
+              label={a.label}
+              icon={<span className={`font-semibold ${a.color}`}>{a.short}</span>}
+              value={total(target, a.stat)}
+              onChange={(delta) => onRegister(target, a.stat, delta)}
+              name={player.name}
+              className=""
+            />
           ))}
         </div>
       )}
 
-      <div className="flex border-t border-gulag-border divide-x divide-gulag-border">
-        {actions.map((a) => {
-          const count = total(target, a.stat);
-          return (
-            <button
-              key={a.stat}
-              onClick={() => onRegister(target, a.stat)}
-              title={a.label}
-              aria-label={`${a.label} de ${player.name}`}
-              className="flex-1 py-3 text-sm text-gray-300 active:bg-gulag-cyan/15 flex items-center justify-center gap-1"
-              style={{ touchAction: 'manipulation' }}
-            >
-              <span aria-hidden="true">{a.icon}</span>
-              {a.short && <span className="text-xs text-gray-400">{a.short}</span>}
-              <span className="tabular-nums text-xs text-gray-400">{count || ''}</span>
-            </button>
-          );
-        })}
+      {/* Cada estatistica com − e +: em campo o toque no cartao resolve, mas
+          na hora de corrigir o placar e preciso poder tirar */}
+      <div className="grid grid-cols-2 border-t border-gulag-border">
+        <Stepper
+          label="Gols"
+          icon="⚽"
+          value={total(target, 'goals')}
+          onChange={(delta) => onRegister(target, 'goals', delta)}
+          name={player.name}
+        />
+        {actions.map((a) => (
+          <Stepper
+            key={a.stat}
+            label={a.label}
+            icon={a.icon}
+            value={total(target, a.stat)}
+            onChange={(delta) => onRegister(target, a.stat, delta)}
+            name={player.name}
+          />
+        ))}
       </div>
+    </div>
+  );
+}
+
+// Contador com − e +. O + repete o toque do cartao; o − existe para corrigir
+// sem depender do "desfazer", que so alcanca o ultimo lancamento.
+function Stepper({ label, icon, value, onChange, name, className = 'border-t border-gulag-border' }) {
+  const botao = 'w-9 py-2 text-lg leading-none text-gray-300 active:bg-gulag-cyan/20 disabled:opacity-30';
+
+  return (
+    <div className={`flex items-center justify-between gap-1 px-2 py-1 ${className}`}>
+      <button
+        onClick={() => onChange(-1)}
+        disabled={value === 0}
+        aria-label={`Tirar ${label} de ${name}`}
+        className={botao}
+        style={{ touchAction: 'manipulation' }}
+      >
+        −
+      </button>
+      <span className="flex items-center gap-1 min-w-0">
+        <span aria-hidden="true">{icon}</span>
+        <span className="tabular-nums text-sm text-gray-100 w-4 text-center">{value}</span>
+      </span>
+      <button
+        onClick={() => onChange(1)}
+        aria-label={`${label} de ${name}`}
+        className={botao}
+        style={{ touchAction: 'manipulation' }}
+      >
+        +
+      </button>
     </div>
   );
 }

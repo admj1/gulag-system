@@ -26,6 +26,7 @@ router.post('/:id/close', requireAdmin, controller.closeList);
 router.post('/:id/draw-teams', requireAdmin, controller.drawTeams);
 router.get('/:id/teams', controller.getTeams);
 router.patch('/:id/teams/assign', requireAdmin, controller.moveTeamPlayer);
+router.patch('/:id/teams/:teamId', requireAdmin, controller.renameTeam);
 router.get('/:id/live', requireAdmin, controller.getLive);
 router.post('/:id/events', requireAdmin, controller.pushEvents);
 router.get('/:id/summary', controller.getSummary);

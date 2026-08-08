@@ -141,8 +141,19 @@ export default function MatchdayPage() {
   );
 }
 
+// Quem fez mais gols (ou mais assistencias) no dia. Empate premia todos os
+// empatados, como o "melhor time do dia" faz com o time inteiro.
+function destaquesDoDia(playerStats, campo) {
+  const melhor = playerStats.reduce((maior, s) => Math.max(maior, s[campo]), 0);
+  if (melhor === 0) return new Set();
+  return new Set(playerStats.filter((s) => s[campo] === melhor).map((s) => s.player_id));
+}
+
 // Depois da pelada realizada e a sumula que interessa, entao ela nasce aberta.
 function SummarySection({ teams, summary, nameById, champion }) {
+  const artilheiros = destaquesDoDia(summary.playerStats, 'goals');
+  const garcons = destaquesDoDia(summary.playerStats, 'assists');
+
   return (
     <Section
       title="Súmula"
@@ -193,7 +204,15 @@ function SummarySection({ teams, summary, nameById, champion }) {
                   <tbody>
                     {stats.map((s) => (
                       <tr key={s.id} className="text-gray-200 border-t border-gulag-border">
-                        <td className="py-1 pr-2 truncate">{nameById[s.player_id] || `#${s.player_id}`}</td>
+                        <td className="py-1 pr-2 truncate">
+                          {nameById[s.player_id] || `#${s.player_id}`}
+                          {artilheiros.has(s.player_id) && (
+                            <span title="artilheiro do dia"> ⚽</span>
+                          )}
+                          {garcons.has(s.player_id) && (
+                            <span title="garçom do dia"> 🎩</span>
+                          )}
+                        </td>
                         <td className="tabular-nums">{s.goals}</td>
                         <td className="tabular-nums">{s.assists}</td>
                         <td className="tabular-nums">{s.yellow_cards + s.blue_cards + s.red_cards}</td>

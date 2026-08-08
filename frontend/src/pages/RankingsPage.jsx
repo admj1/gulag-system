@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
-import { inputClass, Card, Field, EmptyState } from '../components/ui';
+import { inputClass, Card, Field, EmptyState, matchDateLabel } from '../components/ui';
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -12,12 +12,14 @@ export default function RankingsPage() {
   const [rankings, setRankings] = useState({ topScorers: [], topAssists: [], topGoalkeepers: [] });
   const [seasons, setSeasons] = useState([]);
   const [periods, setPeriods] = useState([]);
+  const [curiosities, setCuriosities] = useState(null);
   const [filters, setFilters] = useState({ month: '', year: '', seasonId: '' });
 
   useEffect(() => {
     api.get('/seasons').then(({ data }) => setSeasons(data));
     // Só os meses/anos que têm súmula lançada entram nos seletores
     api.get('/stats/rankings/periods').then(({ data }) => setPeriods(data));
+    api.get('/stats/curiosities').then(({ data }) => setCuriosities(data));
   }, []);
 
   useEffect(() => {
@@ -101,7 +103,58 @@ export default function RankingsPage() {
           render={(i) => `${i.wins}V · ${i.penalties_saved} pên.`}
         />
       </div>
+
+      {curiosities && <Curiosities data={curiosities} />}
     </div>
+  );
+}
+
+// Recordes de todo o periodo, sem o filtro de mes/ano do quadro de cima
+function Curiosities({ data }) {
+  const itens = [
+    { label: 'Recorde de gols num dia', item: data.topScorerDay, unidade: 'gols', comData: true },
+    { label: 'Recorde de assistências num dia', item: data.topAssistDay, unidade: 'assist.', comData: true },
+    { label: 'Mais cartões num dia', item: data.topCardsDay, unidade: 'cartões', comData: true },
+    { label: 'Mais vezes no time da pelada', item: data.bestTeamTitles, unidade: 'vezes' },
+    { label: 'Mais vezes artilheiro do dia', item: data.topScorerTitles, unidade: 'vezes' },
+    { label: 'Mais vezes garçom do dia', item: data.topAssistTitles, unidade: 'vezes' },
+  ];
+
+  return (
+    <Card title="Curiosidades">
+      <p className="text-xs text-gray-500 mb-3">
+        De todo o período registrado, sem o filtro acima. Empate entra todo mundo.
+      </p>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {itens.map(({ label, item, unidade, comData }) => (
+          <li key={label} className="border border-gulag-border rounded p-3 bg-gulag-surface-2">
+            <p className="text-xs text-gray-400 mb-1">{label}</p>
+            {!item ? (
+              <p className="text-sm text-gray-600">Sem dados ainda</p>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-gulag-cyan leading-none">
+                  {item.value} <span className="text-xs font-normal text-gray-400">{unidade}</span>
+                </p>
+                <p className="text-sm text-gray-200 mt-1">
+                  {item.entries.map((e, i) => (
+                    <span key={`${e.id}-${e.match_date || i}`}>
+                      {i > 0 && ', '}
+                      <Link to={`/players/${e.id}`} className="text-gulag-cyan underline">
+                        {e.name}
+                      </Link>
+                      {comData && e.match_date && (
+                        <span className="text-gray-500"> ({matchDateLabel(e.match_date)})</span>
+                      )}
+                    </span>
+                  ))}
+                </p>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
