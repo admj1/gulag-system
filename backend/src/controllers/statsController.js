@@ -107,6 +107,8 @@ const GOLEIRO_DO_DIA_SQL = `
 `;
 
 async function collectiveTotals(playerId) {
+  // O coletivo vem do sorteio, que nao sabe quem faltou: sem descontar a falta,
+  // quem confirmou e nao apareceu levava as vitorias do time do mesmo jeito.
   const { rows: totals } = await pool.query(
     `SELECT
        COUNT(DISTINCT t.matchday_id)::int AS peladas,
@@ -115,7 +117,9 @@ async function collectiveTotals(playerId) {
        COALESCE(SUM(t.losses), 0)::int AS losses
      FROM team_players tp
      JOIN teams t ON t.id = tp.team_id
-     WHERE tp.player_id = $1`,
+     LEFT JOIN player_match_stats s
+       ON s.matchday_id = t.matchday_id AND s.player_id = tp.player_id
+     WHERE tp.player_id = $1 AND COALESCE(s.absent, FALSE) = FALSE`,
     [playerId]
   );
 
@@ -124,7 +128,9 @@ async function collectiveTotals(playerId) {
      SELECT (
        (SELECT COUNT(*) FROM campeoes c
         JOIN team_players tp ON tp.team_id = c.id
-        WHERE tp.player_id = $1)
+        LEFT JOIN player_match_stats s
+          ON s.matchday_id = c.matchday_id AND s.player_id = tp.player_id
+        WHERE tp.player_id = $1 AND COALESCE(s.absent, FALSE) = FALSE)
        + (SELECT COUNT(*) FROM goleiros g WHERE g.player_id = $1)
      )::int AS vezes`,
     [playerId]
@@ -142,7 +148,11 @@ async function collectiveTotals(playerId) {
      JOIN teams t ON t.id = tp.team_id
      JOIN team_players tp2 ON tp2.team_id = tp.team_id AND tp2.player_id <> tp.player_id
      JOIN players companheiro ON companheiro.id = tp2.player_id
+     -- Dia em que um dos dois faltou nao e dia em que jogaram juntos
+     LEFT JOIN player_match_stats s ON s.matchday_id = t.matchday_id AND s.player_id = tp.player_id
+     LEFT JOIN player_match_stats s2 ON s2.matchday_id = t.matchday_id AND s2.player_id = tp2.player_id
      WHERE tp.player_id = $1 AND t.wins + t.draws + t.losses > 0
+       AND COALESCE(s.absent, FALSE) = FALSE AND COALESCE(s2.absent, FALSE) = FALSE
      GROUP BY companheiro.id, companheiro.nickname, companheiro.first_name, companheiro.last_name
      HAVING SUM(t.wins + t.draws + t.losses) > 0`,
     [playerId]
