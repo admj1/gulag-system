@@ -4,6 +4,7 @@ const { displayNameSql, getSettings } = require('../config/settings');
 const {
   sendMatchdayInvites, inviteRecipients, appBaseUrl, MAIL_CONFIGURED,
 } = require('../services/mailer');
+const { confirmationBlock } = require('../services/debts');
 
 
 async function create(req, res, next) {
@@ -339,24 +340,15 @@ async function invitePlayer(req, res, next) {
       return res.status(409).json({ error: 'A lista desta pelada já foi fechada' });
     }
 
-    await client.query('BEGIN');
-
-    let invitedId = player_id;
-    if (!invitedId) {
+    // Valida antes de abrir a transacao: um retorno no meio dela devolveria a
+    // conexao ao pool com a transacao pendurada
+    if (!player_id) {
       if (!first_name) {
         return res.status(400).json({ error: 'Informe o nome de quem você quer incluir' });
       }
-      const type = player_type === 'goleiro' ? 'goleiro' : 'diarista';
-      const passwordHash = await bcrypt.hash(Math.random().toString(36).slice(2), 10);
-      const { rows } = await client.query(
-        `INSERT INTO players (first_name, last_name, nickname, password_hash, player_type)
-         VALUES ($1, COALESCE($2, ''), $3, $4, $5) RETURNING id`,
-        [first_name, last_name, nickname || null, passwordHash, type]
-      );
-      invitedId = rows[0].id;
     } else {
       const { rows } = await client.query(
-        'SELECT player_type, blocked, block_reason, active FROM players WHERE id = $1', [invitedId]
+        'SELECT player_type, blocked, block_reason, active FROM players WHERE id = $1', [player_id]
       );
       if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
       if (!rows[0].active) return res.status(409).json({ error: 'Este cadastro está inativo' });
@@ -366,6 +358,28 @@ async function invitePlayer(req, res, next) {
       if (rows[0].player_type === 'mensalista') {
         return res.status(409).json({ error: 'Mensalistas já entram na lista e confirmam sozinhos' });
       }
+
+      // Nao adianta um terceiro incluir quem esta devendo
+      if (req.user.role !== 'admin') {
+        const pendencia = await confirmationBlock(player_id);
+        if (pendencia) {
+          return res.status(403).json({ error: `Não dá para incluir: ${pendencia}` });
+        }
+      }
+    }
+
+    await client.query('BEGIN');
+
+    let invitedId = player_id;
+    if (!invitedId) {
+      const type = player_type === 'goleiro' ? 'goleiro' : 'diarista';
+      const passwordHash = await bcrypt.hash(Math.random().toString(36).slice(2), 10);
+      const { rows } = await client.query(
+        `INSERT INTO players (first_name, last_name, nickname, password_hash, player_type)
+         VALUES ($1, COALESCE($2, ''), $3, $4, $5) RETURNING id`,
+        [first_name, last_name, nickname || null, passwordHash, type]
+      );
+      invitedId = rows[0].id;
     }
 
     const queuePosition = await nextQueuePosition(client, req.params.id);
@@ -485,6 +499,13 @@ async function confirm(req, res, next) {
     if (!player) return res.status(404).json({ error: 'Jogador não encontrado' });
     if (player.blocked) {
       return res.status(403).json({ error: player.block_reason || 'Cadastro bloqueado' });
+    }
+
+    // Quem esta devendo nao entra na lista. O admin pode confirmar por ele,
+    // para o caso de o acerto ter sido feito na hora, em dinheiro.
+    if (req.user.role !== 'admin') {
+      const pendencia = await confirmationBlock(playerId);
+      if (pendencia) return res.status(403).json({ error: pendencia });
     }
 
     const { rows: matchdayRows } = await client.query(

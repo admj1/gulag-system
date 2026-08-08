@@ -14,6 +14,7 @@ export default function DashboardPage() {
   const [matchdays, setMatchdays] = useState([]);
   const [myStatus, setMyStatus] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pendencia, setPendencia] = useState(null);
 
   const open = matchdays.find((m) => m.status === 'open');
   const others = matchdays.filter((m) => m.status !== 'open');
@@ -29,6 +30,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadMatchdays().finally(() => setLoading(false));
+    // Aviso antes de tentar confirmar, para nao descobrir a pendencia no erro
+    api.get('/finance/me').then(({ data }) => {
+      const mensalidades = data.months.length;
+      const cobrancas = data.charges.length;
+      if (cobrancas > 0 || mensalidades > 1) setPendencia({ mensalidades, cobrancas });
+    }).catch(() => setPendencia(null));
   }, []);
 
   // Status do proprio jogador na pelada com lista aberta
@@ -63,6 +70,20 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {pendencia && (
+        <Card className="border-amber-700/60">
+          <p className="text-sm text-amber-200">
+            Você está com pendência no financeiro
+            {pendencia.cobrancas > 0 && ` · ${pendencia.cobrancas} diária(s)/multa(s)`}
+            {pendencia.mensalidades > 1 && ` · ${pendencia.mensalidades} mensalidades`}
+            . Enquanto não regularizar, não dá para confirmar presença.
+          </p>
+          <Link to="/financeiro" className="text-sm text-gulag-cyan underline mt-2 inline-block">
+            ver o que está em aberto
+          </Link>
+        </Card>
+      )}
+
       {open ? (
         <Card className="border-gulag-cyan/50">
           <p className="text-xs uppercase tracking-wide text-gulag-cyan mb-1">Próxima pelada</p>

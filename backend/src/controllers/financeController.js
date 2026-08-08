@@ -1,28 +1,9 @@
 const pool = require('../config/db');
 const { displayNameSql, getSettings } = require('../config/settings');
+const { monthlyMemberSql, openDebtsFor } = require('../services/debts');
 
-// Quem entra na cobranca de um mes: quem ERA mensalista naquele mes, pelo
-// historico de promocao/rebaixamento. Assim o promovido em setembro nao nasce
-// devendo o ano inteiro e o rebaixado para de acumular a partir da saida.
-// As duas telas do financeiro usam esta mesma regra — quando so uma filtrava,
-// uma escondia o que a outra mostrava.
-// Espera $1 = mes e $2 = ano; a versao do painel troca isso por uma data.
-function monthlyMemberSql(inicioMes, fimMes) {
-  return `
-  EXISTS (
-    SELECT 1 FROM player_status_history h
-    WHERE h.player_id = p.id AND h.player_type = 'mensalista'
-      AND h.start_date <= ${fimMes}
-      AND (h.end_date IS NULL OR h.end_date >= ${inicioMes})
-  )
-  -- Reserva para cadastro que nunca passou pelo botao de promover
-  OR (p.player_type = 'mensalista' AND p.active AND NOT EXISTS (
-    SELECT 1 FROM player_status_history h2
-    WHERE h2.player_id = p.id AND h2.player_type = 'mensalista'
-  ))
-`;
-}
-
+// A regra de quem entra na cobranca de um mes mora em services/debts, porque a
+// confirmacao de presenca tambem precisa dela. Aqui $1 = mes e $2 = ano.
 const MES_INICIO = `make_date($2::int, $1::int, 1)`;
 const MES_FIM = `(make_date($2::int, $1::int, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date`;
 
@@ -192,70 +173,18 @@ async function openMonthlyDebts(req, res, next) {
 // so que limitada a ele: mensalidade em aberto por mes e diarias/multas por dia.
 async function myDebts(req, res, next) {
   try {
-    const settings = await getSettings();
-    const playerId = req.user.id;
-
-    const { rows: mensalidades } = await pool.query(
-      `WITH limites AS (
-         SELECT COALESCE(
-           LEAST(
-             (SELECT MIN(make_date(reference_year, reference_month, 1))
-              FROM payments WHERE type = 'mensalidade'),
-             (SELECT MIN(date_trunc('month', match_date))::date FROM matchdays)
-           ),
-           date_trunc('month', CURRENT_DATE)::date
-         ) AS primeiro
-       ),
-       meses AS (
-         SELECT generate_series(
-           (SELECT primeiro FROM limites),
-           date_trunc('month', CURRENT_DATE)::date,
-           INTERVAL '1 month'
-         )::date AS mes
-       )
-       SELECT EXTRACT(YEAR FROM m.mes)::int AS year,
-              EXTRACT(MONTH FROM m.mes)::int AS month
-       FROM meses m
-       CROSS JOIN players p
-       LEFT JOIN payments pay
-         ON pay.player_id = p.id AND pay.type = 'mensalidade'
-        AND pay.reference_month = EXTRACT(MONTH FROM m.mes)::int
-        AND pay.reference_year = EXTRACT(YEAR FROM m.mes)::int
-       WHERE p.id = $1
-         AND (pay.id IS NULL OR pay.status = 'pending')
-         AND NOT p.exempt_monthly
-         AND (
-           pay.id IS NOT NULL
-           OR ${monthlyMemberSql('m.mes', "(m.mes + INTERVAL '1 month' - INTERVAL '1 day')::date")}
-         )
-       ORDER BY m.mes`,
-      [playerId]
-    );
-
-    const { rows: cobrancas } = await pool.query(
-      `SELECT pay.id, pay.type, pay.amount, m.match_date
-       FROM payments pay
-       LEFT JOIN matchdays m ON m.id = pay.matchday_id
-       WHERE pay.player_id = $1 AND pay.type IN ('diaria', 'multa') AND pay.status = 'pending'
-       ORDER BY m.match_date DESC NULLS LAST`,
-      [playerId]
-    );
-
+    const { months, charges, fee } = await openDebtsFor(req.user.id);
     const { rows: playerRows } = await pool.query(
-      'SELECT player_type, exempt_monthly FROM players WHERE id = $1', [playerId]
+      'SELECT player_type, exempt_monthly FROM players WHERE id = $1', [req.user.id]
     );
-
-    const fee = Number(settings.monthly_fee);
-    const totalMensalidades = mensalidades.length * fee;
-    const totalCobrancas = cobrancas.reduce((soma, c) => soma + Number(c.amount), 0);
 
     res.json({
       player_type: playerRows[0]?.player_type,
       exempt_monthly: !!playerRows[0]?.exempt_monthly,
       fee,
-      months: mensalidades,
-      charges: cobrancas,
-      total: totalMensalidades + totalCobrancas,
+      months,
+      charges,
+      total: months.length * fee + charges.reduce((soma, c) => soma + Number(c.amount), 0),
     });
   } catch (err) {
     next(err);
