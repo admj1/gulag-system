@@ -6,6 +6,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 
 const authRoutes = require('./routes/auth');
 const playersRoutes = require('./routes/players');
@@ -34,7 +35,6 @@ app.use(helmet({
 }));
 app.use(cors());
 app.use(express.json());
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
@@ -48,6 +48,47 @@ const DEPLOY_VERSION = process.env.RAILWAY_GIT_COMMIT_SHA
 app.get('/api/version', (req, res) => res.json({ version: DEPLOY_VERSION }));
 
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
+// Loga o jogador quando o token e valido, para o limite valer por pessoa, nao
+// por IP: numa pelada todo mundo costuma estar na mesma rede (wifi do campo,
+// hotspot), e um limite por IP faz o grupo inteiro dividir a mesma cota — foi
+// isso que travou o sistema no dia em que a ATA foi lancada. Sem token valido
+// (tela de login) cai para o IP, que e a unica coisa disponivel ali.
+function rateLimitKey(req) {
+  const header = req.headers.authorization;
+  if (header?.startsWith('Bearer ')) {
+    try {
+      const { id } = jwt.verify(header.slice('Bearer '.length), process.env.JWT_SECRET);
+      return `user:${id}`;
+    } catch {
+      // token invalido ou expirado: usa o IP mesmo
+    }
+  }
+  return req.ip;
+}
+
+// Uma pagina do sistema dispara varias requisicoes por navegacao (dados da
+// pelada, confirmacoes, times, resumo...), entao o teto por pessoa precisa de
+// folga para uma sessao de uso intenso (ex.: sumula ao vivo) sem incomodar.
+app.use('/api', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  keyGenerator: rateLimitKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições em pouco tempo. Aguarde um instante e tente de novo.' },
+}));
+
+// Login e cadastro ainda nao tem token, entao caem no limite por IP acima; aqui
+// e so uma trava extra contra tentativa de forca bruta — a conta em si ja se
+// autobloqueia apos 5 senhas erradas (ver authController).
+app.use('/api/auth', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas em pouco tempo. Aguarde um instante e tente de novo.' },
+}));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/players', playersRoutes);
