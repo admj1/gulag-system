@@ -21,6 +21,16 @@ function parseMensalistaNumber(value) {
   return number;
 }
 
+// Elenco ativo, todos os tipos: e o que "GET /players" sem filtro devolve.
+// Existe como funcao a parte (nao so a rota) para telas que agregam varias
+// consultas numa unica chamada poderem reaproveitar a mesma query.
+async function listActivePlayers() {
+  const { rows } = await pool.query(
+    `SELECT ${PLAYER_FIELDS} FROM players WHERE active ORDER BY ${PLAYER_ORDER}`
+  );
+  return rows;
+}
+
 async function list(req, res, next) {
   try {
     const { type, search, includeInactive } = req.query;
@@ -417,6 +427,6 @@ async function setRole(req, res, next) {
 }
 
 module.exports = {
-  list, getById, getMe, updateMe, create, update, setBlock, changeStatus,
-  setActive, remove, setRole, changeMyPassword, unlockLogin,
+  list, listActivePlayers, getById, getMe, updateMe, create, update, setBlock,
+  changeStatus, setActive, remove, setRole, changeMyPassword, unlockLogin,
 };

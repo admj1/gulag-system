@@ -5,6 +5,7 @@ const {
   sendMatchdayInvites, inviteRecipients, appBaseUrl, MAIL_CONFIGURED,
 } = require('../services/mailer');
 const { confirmationBlock } = require('../services/debts');
+const { listActivePlayers } = require('./playersController');
 
 
 async function create(req, res, next) {
@@ -740,6 +741,64 @@ async function getSummary(req, res, next) {
   }
 }
 
+// Tudo que a tela da pelada precisa numa unica chamada. Antes eram 5
+// requisicoes por navegacao (pelada, confirmacoes, times, sumula, elenco) —
+// multiplicado por gente entrando ao mesmo tempo, foi isso que sobrecarregou
+// o servidor no dia do lancamento da ATA. Usada tanto pela tela do jogador
+// quanto pela do admin, que buscavam exatamente as mesmas cinco coisas.
+async function getFull(req, res, next) {
+  try {
+    const { rows: matchdayRows } = await pool.query(
+      'SELECT * FROM matchdays WHERE id = $1', [req.params.id]
+    );
+    if (!matchdayRows[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
+
+    const [
+      { rows: confirmations },
+      { rows: teamRows },
+      { rows: playerStats },
+      { rows: goalkeeperStats },
+      players,
+    ] = await Promise.all([
+      pool.query(
+        `SELECT c.*, ${displayNameSql('p')} AS name, p.player_type, p.stars, p.photo_url, p.mensalista_number,
+                ${displayNameSql('inv')} AS invited_by_name
+         FROM confirmations c
+         JOIN players p ON p.id = c.player_id
+         LEFT JOIN players inv ON inv.id = c.invited_by_player_id
+         WHERE c.matchday_id = $1
+         ORDER BY p.mensalista_number NULLS LAST, c.queue_position NULLS LAST, c.confirmed_at`,
+        [req.params.id]
+      ),
+      pool.query('SELECT * FROM teams WHERE matchday_id = $1 ORDER BY name', [req.params.id]),
+      pool.query('SELECT * FROM player_match_stats WHERE matchday_id = $1', [req.params.id]),
+      pool.query('SELECT * FROM goalkeeper_match_stats WHERE matchday_id = $1', [req.params.id]),
+      listActivePlayers(),
+    ]);
+
+    const { rows: teamPlayers } = await pool.query(
+      `SELECT tp.team_id, p.id, ${displayNameSql('p')} AS name, p.stars FROM team_players tp
+       JOIN players p ON p.id = tp.player_id
+       WHERE tp.team_id = ANY($1::int[])`,
+      [teamRows.map((t) => t.id)]
+    );
+    const teams = teamRows.map((t) => ({
+      ...t,
+      players: teamPlayers.filter((p) => p.team_id === t.id),
+    }));
+
+    res.json({
+      matchday: matchdayRows[0],
+      confirmations,
+      teams,
+      summary: { playerStats, goalkeeperStats },
+      players,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Sumula ao vivo: o que um toque na tela pode somar. Jogador de linha e goleiro
 // tem colunas diferentes, como na ata em papel.
 const LIVE_LINE_STATS = ['goals', 'assists', 'yellow_cards', 'blue_cards', 'red_cards'];
@@ -1043,4 +1102,5 @@ module.exports = {
   drawTeams, submitSummary, getSummary, getTeams, moveTeamPlayer, rosterPreview, createFromRoster, remove,
   setConfirmation, removeConfirmation, invitePlayer, cancelOwnConfirmation,
   declineOwn, createRetroactive, getLive, pushEvents, notifyMatchday, renameTeam,
+  getFull,
 };

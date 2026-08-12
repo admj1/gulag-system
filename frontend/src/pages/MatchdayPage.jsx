@@ -18,12 +18,15 @@ export default function MatchdayPage() {
   const [summary, setSummary] = useState({ playerStats: [], goalkeeperStats: [] });
   const [allPlayers, setAllPlayers] = useState([]);
 
+  // Uma chamada so: antes eram 5 requisicoes para montar esta tela
   function load() {
-    api.get(`/matchdays/${id}`).then(({ data }) => setMatchday(data));
-    api.get(`/matchdays/${id}/confirmations`).then(({ data }) => setConfirmations(data));
-    api.get(`/matchdays/${id}/teams`).then(({ data }) => setTeams(data));
-    api.get(`/matchdays/${id}/summary`).then(({ data }) => setSummary(data));
-    api.get('/players').then(({ data }) => setAllPlayers(data));
+    api.get(`/matchdays/${id}/full`).then(({ data }) => {
+      setMatchday(data.matchday);
+      setConfirmations(data.confirmations);
+      setTeams(data.teams);
+      setSummary(data.summary);
+      setAllPlayers(data.players);
+    });
   }
 
   useEffect(load, [id]);

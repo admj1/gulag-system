@@ -34,14 +34,17 @@ export default function AdminMatchdayDetailPage() {
   // Limpa o aviso ao sair da tela
   useEffect(() => () => setUnsaved(false), []);
 
+  // Uma chamada so: antes eram 5 requisicoes para montar esta tela
   function load() {
-    api.get(`/matchdays/${id}`).then(({ data }) => setMatchday(data));
-    api.get(`/matchdays/${id}/confirmations`).then(({ data }) => setConfirmations(data));
-    api.get(`/matchdays/${id}/teams`).then(({ data }) => setTeams(data));
-    api.get('/players').then(({ data }) => setAllPlayers(data));
-    api.get(`/matchdays/${id}/summary`).then(({ data }) => {
-      setPlayerStats(Object.fromEntries(data.playerStats.map((s) => [s.player_id, s])));
-      setGoalkeeperStats(Object.fromEntries(data.goalkeeperStats.map((s) => [s.player_id, s])));
+    api.get(`/matchdays/${id}/full`).then(({ data }) => {
+      setMatchday(data.matchday);
+      setConfirmations(data.confirmations);
+      setTeams(data.teams);
+      setAllPlayers(data.players);
+      setPlayerStats(Object.fromEntries(data.summary.playerStats.map((s) => [s.player_id, s])));
+      setGoalkeeperStats(
+        Object.fromEntries(data.summary.goalkeeperStats.map((s) => [s.player_id, s]))
+      );
     });
   }
 

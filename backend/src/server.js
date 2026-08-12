@@ -67,13 +67,16 @@ function rateLimitKey(req) {
   return req.ip;
 }
 
-// Uma pagina do sistema dispara varias requisicoes por navegacao (dados da
-// pelada, confirmacoes, times, resumo...), entao o teto por pessoa precisa de
-// folga para uma sessao de uso intenso (ex.: sumula ao vivo) sem incomodar.
+// Leitura (GET) fica de fora do limite: abrir telas nao gasta recurso do banco
+// como uma escrita gasta, e foi rajada de GET (todo mundo navegando ao mesmo
+// tempo) que travou o sistema no dia do lancamento da ATA — nao adianta reduzir
+// so o numero se o que estoura a cota nem e o que precisa ser contido. O limite
+// vale para quem grava algo (POST/PATCH/DELETE), que e o que de fato pesa.
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
   keyGenerator: rateLimitKey,
+  skip: (req) => req.method === 'GET',
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Muitas requisições em pouco tempo. Aguarde um instante e tente de novo.' },

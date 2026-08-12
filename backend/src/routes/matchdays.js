@@ -12,6 +12,9 @@ router.get('/roster-preview', requireAdmin, controller.rosterPreview);
 router.post('/from-roster', requireAdmin, controller.createFromRoster);
 router.post('/retroactive', requireAdmin, controller.createRetroactive);
 router.get('/:id', controller.getById);
+// Agrega pelada + confirmacoes + times + sumula + elenco numa unica resposta,
+// para as telas que precisam de tudo isso nao terem que fazer 5 requisicoes
+router.get('/:id/full', controller.getFull);
 router.delete('/:id', requireAdmin, controller.remove);
 router.get('/:id/confirmations', controller.getConfirmations);
 router.post('/:id/confirmations', controller.confirm);
