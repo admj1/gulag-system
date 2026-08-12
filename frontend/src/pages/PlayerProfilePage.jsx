@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../api/client';
-import { Card, Avatar } from '../components/ui';
+import { Card, Avatar, matchDateLabel } from '../components/ui';
+
+// O que aparece ao lado da data, quando houver. Dia sem nada fica so com a data.
+const MARCAS = [
+  { campo: 'goals', emoji: '⚽', titulo: 'gols' },
+  { campo: 'assists', emoji: '🎩', titulo: 'assistências' },
+  { campo: 'penalties_saved', emoji: '🧤', titulo: 'pênaltis defendidos' },
+  { campo: 'yellow_cards', emoji: '🟨', titulo: 'cartões amarelos' },
+  { campo: 'blue_cards', emoji: '🟦', titulo: 'cartões azuis' },
+  { campo: 'red_cards', emoji: '🟥', titulo: 'cartões vermelhos' },
+];
 
 export default function PlayerProfilePage() {
   const { id } = useParams();
@@ -15,7 +25,7 @@ export default function PlayerProfilePage() {
 
   if (!player || !profile) return <p className="text-gray-400">Carregando...</p>;
 
-  const { totals, goalkeeperTotals, collective } = profile;
+  const { totals, goalkeeperTotals, collective, history } = profile;
 
   return (
     <div className="flex flex-col gap-4">
@@ -38,6 +48,36 @@ export default function PlayerProfilePage() {
           </p>
         </div>
       </div>
+
+      <Card title="Últimas peladas">
+        {!history || history.length === 0 ? (
+          <p className="text-sm text-gray-500">Nenhuma pelada jogada ainda.</p>
+        ) : (
+          <ul className="flex flex-col">
+            {history.map((dia) => (
+              <li key={dia.matchday_id} className="border-b border-gulag-border py-2 last:border-0">
+                <Link
+                  to={`/peladas/${dia.matchday_id}`}
+                  className="flex items-center gap-3 flex-wrap"
+                >
+                  <span className="text-sm text-gulag-cyan underline tabular-nums">
+                    {matchDateLabel(dia.match_date)}
+                  </span>
+                  <span className="flex items-center gap-2 text-sm text-gray-200">
+                    {MARCAS.map(({ campo, emoji, titulo }) => (
+                      dia[campo] > 0 && (
+                        <span key={campo} title={titulo} className="tabular-nums">
+                          {emoji}{dia[campo]}
+                        </span>
+                      )
+                    ))}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {/* Para goleiro, as estatisticas de goleiro vem sempre primeiro */}
       {player.player_type === 'goleiro' && (

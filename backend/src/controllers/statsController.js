@@ -48,12 +48,43 @@ async function playerSummary(id) {
     [id]
   );
 
+  // Ultimas peladas em que apareceu, na linha ou no gol. Agrupa por dia porque
+  // quem jogou nas duas posicoes no mesmo dia tem registro nas duas tabelas.
+  const { rows: history } = await pool.query(
+    `WITH participacoes AS (
+       SELECT s.matchday_id, m.match_date, s.goals, s.assists,
+              s.yellow_cards, s.blue_cards, s.red_cards, 0 AS penalties_saved
+       FROM player_match_stats s
+       JOIN matchdays m ON m.id = s.matchday_id
+       WHERE s.player_id = $1 AND NOT s.absent
+       UNION ALL
+       SELECT g.matchday_id, m.match_date, g.goals, g.assists,
+              g.yellow_cards, 0 AS blue_cards, g.red_cards, g.penalties_saved
+       FROM goalkeeper_match_stats g
+       JOIN matchdays m ON m.id = g.matchday_id
+       WHERE g.player_id = $1
+     )
+     SELECT matchday_id, match_date,
+            SUM(goals)::int AS goals,
+            SUM(assists)::int AS assists,
+            SUM(yellow_cards)::int AS yellow_cards,
+            SUM(blue_cards)::int AS blue_cards,
+            SUM(red_cards)::int AS red_cards,
+            SUM(penalties_saved)::int AS penalties_saved
+     FROM participacoes
+     GROUP BY matchday_id, match_date
+     ORDER BY match_date DESC
+     LIMIT 5`,
+    [id]
+  );
+
   const collective = await collectiveTotals(id);
 
   return {
     totals: { ...totals[0], ...titles[0] },
     goalkeeperTotals: goalkeeperTotals[0],
     collective,
+    history,
   };
 }
 
