@@ -74,7 +74,7 @@ async function playerSummary(id) {
      FROM participacoes
      GROUP BY matchday_id, match_date
      ORDER BY match_date DESC
-     LIMIT 5`,
+     LIMIT 10`,
     [id]
   );
 

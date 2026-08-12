@@ -49,36 +49,6 @@ export default function PlayerProfilePage() {
         </div>
       </div>
 
-      <Card title="Últimas peladas">
-        {!history || history.length === 0 ? (
-          <p className="text-sm text-gray-500">Nenhuma pelada jogada ainda.</p>
-        ) : (
-          <ul className="flex flex-col">
-            {history.map((dia) => (
-              <li key={dia.matchday_id} className="border-b border-gulag-border py-2 last:border-0">
-                <Link
-                  to={`/peladas/${dia.matchday_id}`}
-                  className="flex items-center gap-3 flex-wrap"
-                >
-                  <span className="text-sm text-gulag-cyan underline tabular-nums">
-                    {matchDateLabel(dia.match_date)}
-                  </span>
-                  <span className="flex items-center gap-2 text-sm text-gray-200">
-                    {MARCAS.map(({ campo, emoji, titulo }) => (
-                      dia[campo] > 0 && (
-                        <span key={campo} title={titulo} className="tabular-nums">
-                          {emoji}{dia[campo]}
-                        </span>
-                      )
-                    ))}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
       {/* Para goleiro, as estatisticas de goleiro vem sempre primeiro */}
       {player.player_type === 'goleiro' && (
         <Card title="Estatísticas de goleiro">
@@ -145,6 +115,36 @@ export default function PlayerProfilePage() {
         <p className="text-xs text-gray-500 mt-2">
           A porcentagem considera só as partidas em que os dois jogaram no mesmo time.
         </p>
+      </Card>
+
+      <Card title="Últimas peladas">
+        {!history || history.length === 0 ? (
+          <p className="text-sm text-gray-500">Nenhuma pelada jogada ainda.</p>
+        ) : (
+          <ul className="flex flex-col">
+            {history.map((dia) => (
+              <li key={dia.matchday_id} className="border-b border-gulag-border py-2 last:border-0">
+                <Link
+                  to={`/peladas/${dia.matchday_id}`}
+                  className="flex items-center gap-3 flex-wrap"
+                >
+                  <span className="text-sm text-gulag-cyan underline tabular-nums">
+                    {matchDateLabel(dia.match_date)}
+                  </span>
+                  <span className="flex items-center gap-2 text-sm text-gray-200">
+                    {MARCAS.map(({ campo, emoji, titulo }) => (
+                      dia[campo] > 0 && (
+                        <span key={campo} title={titulo} className="tabular-nums">
+                          {emoji}{dia[campo]}
+                        </span>
+                      )
+                    ))}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
     </div>
   );
