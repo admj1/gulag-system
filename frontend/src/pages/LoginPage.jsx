@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { inputClass, Button } from '../components/ui';
@@ -11,6 +11,7 @@ export default function LoginPage() {
   const { register, handleSubmit, setValue, formState } = useForm();
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [remember, setRemember] = useState(false);
   const [locked, setLocked] = useState(null);
 
@@ -22,6 +23,13 @@ export default function LoginPage() {
       setRemember(true);
     }
   }, [setValue]);
+
+  // Sessao vencida: o interceptor de resposta manda para ca com este aviso
+  useEffect(() => {
+    if (searchParams.get('expired') === '1') {
+      toast.error('Sua sessão expirou. Entre novamente.');
+    }
+  }, [searchParams]);
 
   async function onSubmit(values) {
     setLocked(null);

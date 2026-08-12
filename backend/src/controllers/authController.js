@@ -10,7 +10,7 @@ function signToken(player) {
   return jwt.sign(
     { id: player.id, role: player.role, name: player.name },
     process.env.JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: '3d' }
   );
 }
 
