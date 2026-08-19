@@ -1055,21 +1055,26 @@ async function submitSummary(req, res, next) {
       const playerType = playerRows[0]?.player_type;
       if (playerType === 'goleiro') continue; // goleiros sao isentos de qualquer cobranca
 
-      if (s.absent) {
-        // Multa por confirmar presenca e faltar
-        await client.query(
-          `INSERT INTO payments (player_id, season_id, type, matchday_id, amount, status)
-           VALUES ($1, $2, 'multa', $3, $4, 'pending')`,
-          [s.player_id, seasonId, req.params.id, settings.absence_fine]
-        );
-      } else if (playerType === 'diarista') {
-        // Diaria de quem efetivamente jogou
-        await client.query(
-          `INSERT INTO payments (player_id, season_id, type, matchday_id, amount, status)
-           VALUES ($1, $2, 'diaria', $3, $4, 'pending')`,
-          [s.player_id, seasonId, req.params.id, settings.daily_fee]
-        );
-      }
+      const chargeType = s.absent ? 'multa' : (playerType === 'diarista' ? 'diaria' : null);
+      if (!chargeType) continue;
+
+      // Cobranca ja quitada e historico: reeditar a sumula (corrigir um cartao,
+      // por exemplo) nao pode fazer uma diaria/multa ja paga "voltar a dever".
+      // O DELETE acima so limpa pendentes; aqui e so nao duplicar em cima do
+      // que ja foi baixado.
+      const { rows: pagas } = await client.query(
+        `SELECT 1 FROM payments
+         WHERE matchday_id = $1 AND player_id = $2 AND type = $3 AND status = 'paid'`,
+        [req.params.id, s.player_id, chargeType]
+      );
+      if (pagas.length > 0) continue;
+
+      await client.query(
+        `INSERT INTO payments (player_id, season_id, type, matchday_id, amount, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')`,
+        [s.player_id, seasonId, chargeType, req.params.id,
+         chargeType === 'multa' ? settings.absence_fine : settings.daily_fee]
+      );
     }
 
     for (const g of goalkeeperStats) {
