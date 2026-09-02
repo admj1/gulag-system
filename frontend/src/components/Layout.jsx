@@ -17,6 +17,7 @@ const ADMIN_LINKS = [
   { to: '/admin/matchdays', label: 'GERENCIAMENTO DE ATAS' },
   { to: '/admin/finance', label: 'CONTROLE FINANCEIRO' },
   { to: '/admin/whatsapp', label: 'WHATSAPP' },
+  { to: '/admin/auditoria', label: 'AUDITORIA' },
   { to: '/admin/settings', label: 'CONFIGURAÇÕES' },
 ];
 

@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { logAudit } = require('../services/audit');
 
 async function list(req, res, next) {
   try {
@@ -43,6 +44,9 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   try {
+    const { rows: season } = await pool.query('SELECT name FROM seasons WHERE id = $1', [req.params.id]);
+    if (!season[0]) return res.status(404).json({ error: 'Temporada não encontrada' });
+
     const { rows } = await pool.query(
       'SELECT COUNT(*)::int AS count FROM matchdays WHERE season_id = $1',
       [req.params.id]
@@ -51,6 +55,13 @@ async function remove(req, res, next) {
       return res.status(409).json({ error: `Temporada possui ${rows[0].count} pelada(s) e não pode ser apagada` });
     }
     await pool.query('DELETE FROM seasons WHERE id = $1', [req.params.id]);
+
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: 'season.delete', targetType: 'season', targetId: Number(req.params.id),
+      targetLabel: season[0].name,
+    });
+
     res.json({ ok: true });
   } catch (err) {
     next(err);

@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { displayNameSql } = require('../config/settings');
+const { logAudit } = require('../services/audit');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
   phone, email, photo_url, position, stars, role, player_type, blocked, mensalista_number,
@@ -251,6 +252,17 @@ async function update(req, res, next) {
        auto_roster !== undefined, !!auto_roster]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
+
+    // So audita quando o admin de fato trocou a senha de outra pessoa — o
+    // resto do formulario (nome, telefone, estrelas...) nao e sensivel assim
+    if (passwordHash) {
+      await logAudit({
+        actorId: req.user.id, actorName: req.user.name,
+        action: 'player.password_reset', targetType: 'player', targetId: rows[0].id,
+        targetLabel: rows[0].name,
+      });
+    }
+
     res.json(rows[0]);
   } catch (err) {
     if (err.code === '23505') {
@@ -270,6 +282,14 @@ async function setBlock(req, res, next) {
       [blocked, blocked ? block_reason : null, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
+
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: blocked ? 'player.block' : 'player.unblock',
+      targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
+      details: blocked ? { motivo: block_reason || null } : null,
+    });
+
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -366,7 +386,7 @@ async function setActive(req, res, next) {
 async function remove(req, res, next) {
   try {
     const { rows: owner } = await pool.query(
-      'SELECT is_owner FROM players WHERE id = $1', [req.params.id]
+      `SELECT is_owner, ${displayNameSql()} AS name FROM players WHERE id = $1`, [req.params.id]
     );
     if (!owner[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
     if (owner[0].is_owner) {
@@ -391,6 +411,13 @@ async function remove(req, res, next) {
 
     await pool.query('DELETE FROM player_status_history WHERE player_id = $1', [req.params.id]);
     await pool.query('DELETE FROM players WHERE id = $1', [req.params.id]);
+
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: 'player.delete', targetType: 'player', targetId: Number(req.params.id),
+      targetLabel: owner[0].name,
+    });
+
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -420,6 +447,13 @@ async function setRole(req, res, next) {
     if (!rows[0]) {
       return res.status(404).json({ error: 'Jogador não encontrado ou é o dono do sistema' });
     }
+
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: role === 'admin' ? 'player.promote_admin' : 'player.demote_admin',
+      targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
+    });
+
     res.json(rows[0]);
   } catch (err) {
     next(err);

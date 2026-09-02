@@ -40,15 +40,14 @@ export default function AdminMatchdaysPage() {
     }
   }
 
-  // So abre o pedido de senha; quem de fato apaga e confirmDeleteMatchday,
-  // depois que a senha for digitada
+  // So abre o pedido de confirmacao; quem de fato apaga e confirmDeleteMatchday
   function removeMatchday(matchday) {
     setDeleting(matchday);
   }
 
-  async function confirmDeleteMatchday(password) {
+  async function confirmDeleteMatchday() {
     try {
-      await api.delete(`/matchdays/${deleting.id}`, { data: { password } });
+      await api.delete(`/matchdays/${deleting.id}`);
       toast.success('Pelada apagada');
       setDeleting(null);
       load();
@@ -160,15 +159,22 @@ function MatchdayActions({ matchday, onRemove }) {
 // Apagar pelada e sem volta: some ata, times, sumula e cobrancas. A senha
 // nao e sobre permissao (quem chega aqui ja e admin) — e para nao sair no
 // automatico numa acao que nao tem "desfazer".
+// Digitar a palavra e so uma trava contra clique acidental (o "Apagar" fica
+// bem do lado do "Gerenciar" na lista) — nao e verificacao de senha nem de
+// permissao, quem chega aqui ja e admin. Quem fez fica registrado na
+// auditoria de qualquer forma.
+const CONFIRM_WORD = 'EXCLUIR';
+
 function DeleteMatchdayModal({ matchday, onClose, onConfirm }) {
-  const [password, setPassword] = useState('');
+  const [typed, setTyped] = useState('');
   const [saving, setSaving] = useState(false);
+  const ready = typed === CONFIRM_WORD;
 
   async function handleConfirm() {
-    if (!password) return;
+    if (!ready) return;
     setSaving(true);
     try {
-      await onConfirm(password);
+      await onConfirm();
     } finally {
       setSaving(false);
     }
@@ -181,20 +187,20 @@ function DeleteMatchdayModal({ matchday, onClose, onConfirm }) {
           Isso apaga a pelada de <strong>{matchDateLabel(matchday.match_date)}</strong>, com a ata,
           os times, a súmula e as cobranças dela. Não tem como desfazer.
         </p>
-        <Field label="Digite sua senha para confirmar">
+        <Field label={`Digite ${CONFIRM_WORD} para confirmar`}>
           <input
-            type="password"
             autoFocus
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleConfirm(); }}
-            autoComplete="current-password"
+            autoCapitalize="characters"
+            autoComplete="off"
             className={inputClass}
           />
         </Field>
         <div className="flex gap-2 justify-end">
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button variant="danger" onClick={handleConfirm} disabled={!password || saving}>
+          <Button variant="danger" onClick={handleConfirm} disabled={!ready || saving}>
             {saving ? 'Apagando...' : 'Apagar definitivamente'}
           </Button>
         </div>

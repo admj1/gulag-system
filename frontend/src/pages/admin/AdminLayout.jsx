@@ -6,6 +6,7 @@ const TITLES = {
   '/admin/matchdays': 'Gerenciamento de ATAS',
   '/admin/finance': 'Controle Financeiro',
   '/admin/whatsapp': 'Confirmação por WhatsApp',
+  '/admin/auditoria': 'Auditoria',
   '/admin/settings': 'Configurações',
 };
 

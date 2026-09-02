@@ -5,6 +5,7 @@ const {
   sendMatchdayInvites, inviteRecipients, appBaseUrl, MAIL_CONFIGURED,
 } = require('../services/mailer');
 const { confirmationBlock } = require('../services/debts');
+const { logAudit } = require('../services/audit');
 const { listActivePlayers } = require('./playersController');
 
 
@@ -721,21 +722,29 @@ async function moveTeamPlayer(req, res, next) {
 // cobrancas dela (nao ha lixeira). Por isso exige a propria senha do admin,
 // como redigitar a senha antes de uma acao sem volta — quem chega aqui ja e
 // admin, isso nao e sobre permissao, e sobre nao deixar sair no automatico.
+// Apagar uma pelada e irreversivel: some a ata, os times, a sumula e as
+// cobrancas dela (nao ha lixeira). A trava contra clique acidental fica no
+// frontend (digitar "EXCLUIR"); o que garante que da pra saber quem fez, se
+// precisar, e o registro de auditoria abaixo.
 async function remove(req, res, next) {
   try {
-    const { password } = req.body || {};
-    if (!password) {
-      return res.status(400).json({ error: 'Confirme sua senha para excluir esta pelada' });
-    }
-    const { rows } = await pool.query(
-      'SELECT password_hash FROM players WHERE id = $1', [req.user.id]
+    const { rows: mdRows } = await pool.query(
+      'SELECT match_date FROM matchdays WHERE id = $1', [req.params.id]
     );
-    if (!rows[0] || !(await bcrypt.compare(password, rows[0].password_hash))) {
-      return res.status(401).json({ error: 'Senha incorreta' });
-    }
+    if (!mdRows[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
 
     await pool.query('DELETE FROM payments WHERE matchday_id = $1', [req.params.id]);
     await pool.query('DELETE FROM matchdays WHERE id = $1', [req.params.id]);
+
+    await logAudit({
+      actorId: req.user.id,
+      actorName: req.user.name,
+      action: 'matchday.delete',
+      targetType: 'matchday',
+      targetId: Number(req.params.id),
+      targetLabel: mdRows[0].match_date,
+    });
+
     res.json({ ok: true });
   } catch (err) {
     next(err);
