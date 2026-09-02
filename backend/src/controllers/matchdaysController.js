@@ -717,8 +717,23 @@ async function moveTeamPlayer(req, res, next) {
   }
 }
 
+// Apagar uma pelada e irreversivel: some a ata, os times, a sumula e as
+// cobrancas dela (nao ha lixeira). Por isso exige a propria senha do admin,
+// como redigitar a senha antes de uma acao sem volta — quem chega aqui ja e
+// admin, isso nao e sobre permissao, e sobre nao deixar sair no automatico.
 async function remove(req, res, next) {
   try {
+    const { password } = req.body || {};
+    if (!password) {
+      return res.status(400).json({ error: 'Confirme sua senha para excluir esta pelada' });
+    }
+    const { rows } = await pool.query(
+      'SELECT password_hash FROM players WHERE id = $1', [req.user.id]
+    );
+    if (!rows[0] || !(await bcrypt.compare(password, rows[0].password_hash))) {
+      return res.status(401).json({ error: 'Senha incorreta' });
+    }
+
     await pool.query('DELETE FROM payments WHERE matchday_id = $1', [req.params.id]);
     await pool.query('DELETE FROM matchdays WHERE id = $1', [req.params.id]);
     res.json({ ok: true });

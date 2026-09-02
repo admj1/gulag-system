@@ -17,6 +17,7 @@ export default function AdminMatchdaysPage() {
   const [showRetro, setShowRetro] = useState(false);
   const [showSeason, setShowSeason] = useState(false);
   const [editingSeason, setEditingSeason] = useState(null);
+  const [deleting, setDeleting] = useState(null); // pelada aguardando confirmacao de senha
 
   function load() {
     api.get('/matchdays').then(({ data }) => setMatchdays(data));
@@ -39,11 +40,17 @@ export default function AdminMatchdaysPage() {
     }
   }
 
-  async function removeMatchday(matchday) {
-    if (!window.confirm('Apagar esta pelada e suas cobranças?')) return;
+  // So abre o pedido de senha; quem de fato apaga e confirmDeleteMatchday,
+  // depois que a senha for digitada
+  function removeMatchday(matchday) {
+    setDeleting(matchday);
+  }
+
+  async function confirmDeleteMatchday(password) {
     try {
-      await api.delete(`/matchdays/${matchday.id}`);
+      await api.delete(`/matchdays/${deleting.id}`, { data: { password } });
       toast.success('Pelada apagada');
+      setDeleting(null);
       load();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao apagar pelada');
@@ -128,6 +135,13 @@ export default function AdminMatchdaysPage() {
           onSaved={() => { setShowSeason(false); setEditingSeason(null); load(); }}
         />
       )}
+      {deleting && (
+        <DeleteMatchdayModal
+          matchday={deleting}
+          onClose={() => setDeleting(null)}
+          onConfirm={confirmDeleteMatchday}
+        />
+      )}
     </div>
   );
 }
@@ -140,6 +154,52 @@ function MatchdayActions({ matchday, onRemove }) {
       </Link>
       <Button variant="danger" onClick={() => onRemove(matchday)}>Apagar</Button>
     </div>
+  );
+}
+
+// Apagar pelada e sem volta: some ata, times, sumula e cobrancas. A senha
+// nao e sobre permissao (quem chega aqui ja e admin) — e para nao sair no
+// automatico numa acao que nao tem "desfazer".
+function DeleteMatchdayModal({ matchday, onClose, onConfirm }) {
+  const [password, setPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function handleConfirm() {
+    if (!password) return;
+    setSaving(true);
+    try {
+      await onConfirm(password);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Apagar pelada" onClose={onClose}>
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-gray-300">
+          Isso apaga a pelada de <strong>{matchDateLabel(matchday.match_date)}</strong>, com a ata,
+          os times, a súmula e as cobranças dela. Não tem como desfazer.
+        </p>
+        <Field label="Digite sua senha para confirmar">
+          <input
+            type="password"
+            autoFocus
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleConfirm(); }}
+            autoComplete="current-password"
+            className={inputClass}
+          />
+        </Field>
+        <div className="flex gap-2 justify-end">
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button variant="danger" onClick={handleConfirm} disabled={!password || saving}>
+            {saving ? 'Apagando...' : 'Apagar definitivamente'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
