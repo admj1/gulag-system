@@ -17,7 +17,8 @@ export default function AdminMatchdaysPage() {
   const [showRetro, setShowRetro] = useState(false);
   const [showSeason, setShowSeason] = useState(false);
   const [editingSeason, setEditingSeason] = useState(null);
-  const [deleting, setDeleting] = useState(null); // pelada aguardando confirmacao de senha
+  const [deleting, setDeleting] = useState(null); // pelada aguardando confirmacao
+  const [deletingSeason, setDeletingSeason] = useState(null); // temporada aguardando confirmacao
 
   function load() {
     api.get('/matchdays').then(({ data }) => setMatchdays(data));
@@ -29,11 +30,16 @@ export default function AdminMatchdaysPage() {
   const openMatchday = matchdays.find((m) => m.status === 'open');
   const previous = matchdays.filter((m) => m.status !== 'open');
 
-  async function removeSeason(season) {
-    if (!window.confirm(`Apagar a temporada "${season.name}"?`)) return;
+  // So abre o pedido de confirmacao; quem de fato apaga e confirmDeleteSeason
+  function removeSeason(season) {
+    setDeletingSeason(season);
+  }
+
+  async function confirmDeleteSeason() {
     try {
-      await api.delete(`/seasons/${season.id}`);
+      await api.delete(`/seasons/${deletingSeason.id}`);
       toast.success('Temporada apagada');
+      setDeletingSeason(null);
       load();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao apagar temporada');
@@ -135,10 +141,28 @@ export default function AdminMatchdaysPage() {
         />
       )}
       {deleting && (
-        <DeleteMatchdayModal
-          matchday={deleting}
+        <ConfirmDeleteModal
+          title="Apagar pelada"
+          message={
+            <>
+              Isso apaga a pelada de <strong>{matchDateLabel(deleting.match_date)}</strong>, com a
+              ata, os times, a súmula e as cobranças dela. Não tem como desfazer.
+            </>
+          }
           onClose={() => setDeleting(null)}
           onConfirm={confirmDeleteMatchday}
+        />
+      )}
+      {deletingSeason && (
+        <ConfirmDeleteModal
+          title="Apagar temporada"
+          message={
+            <>
+              Isso apaga a temporada <strong>{deletingSeason.name}</strong>. Não tem como desfazer.
+            </>
+          }
+          onClose={() => setDeletingSeason(null)}
+          onConfirm={confirmDeleteSeason}
         />
       )}
     </div>
@@ -156,16 +180,13 @@ function MatchdayActions({ matchday, onRemove }) {
   );
 }
 
-// Apagar pelada e sem volta: some ata, times, sumula e cobrancas. A senha
-// nao e sobre permissao (quem chega aqui ja e admin) — e para nao sair no
-// automatico numa acao que nao tem "desfazer".
-// Digitar a palavra e so uma trava contra clique acidental (o "Apagar" fica
-// bem do lado do "Gerenciar" na lista) — nao e verificacao de senha nem de
-// permissao, quem chega aqui ja e admin. Quem fez fica registrado na
-// auditoria de qualquer forma.
+// Apagar pelada ou temporada e sem volta. Digitar a palavra e so uma trava
+// contra clique acidental (o "Apagar" fica bem do lado de outros botoes nas
+// listas) — nao e verificacao de senha nem de permissao, quem chega aqui ja
+// e admin. Quem fez fica registrado na auditoria de qualquer forma.
 const CONFIRM_WORD = 'EXCLUIR';
 
-function DeleteMatchdayModal({ matchday, onClose, onConfirm }) {
+function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
   const [typed, setTyped] = useState('');
   const [saving, setSaving] = useState(false);
   const ready = typed === CONFIRM_WORD;
@@ -181,12 +202,9 @@ function DeleteMatchdayModal({ matchday, onClose, onConfirm }) {
   }
 
   return (
-    <Modal title="Apagar pelada" onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       <div className="flex flex-col gap-3">
-        <p className="text-sm text-gray-300">
-          Isso apaga a pelada de <strong>{matchDateLabel(matchday.match_date)}</strong>, com a ata,
-          os times, a súmula e as cobranças dela. Não tem como desfazer.
-        </p>
+        <p className="text-sm text-gray-300">{message}</p>
         <Field label={`Digite ${CONFIRM_WORD} para confirmar`}>
           <input
             autoFocus
