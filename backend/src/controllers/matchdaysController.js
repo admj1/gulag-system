@@ -211,6 +211,16 @@ async function createRetroactive(req, res, next) {
     }
 
     await client.query('COMMIT');
+
+    // Lancamento retroativo e reconstrucao de dado historico a mao — vale
+    // saber quem lancou e quando, igual a qualquer outra correcao manual
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: 'matchday.create_retroactive', targetType: 'matchday', targetId: matchday.id,
+      targetLabel: matchday.match_date,
+      details: { jogadores: player_ids.length, times: teamCount },
+    });
+
     res.status(201).json(matchday);
   } catch (err) {
     await client.query('ROLLBACK');

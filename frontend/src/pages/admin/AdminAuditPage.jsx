@@ -14,6 +14,9 @@ const ACTION_LABELS = {
   'player.promote_admin': 'promoveu {alvo} a administrador',
   'player.demote_admin': 'removeu o acesso de administrador de {alvo}',
   'season.delete': 'apagou a temporada {alvo}',
+  'player.self_update': 'editou o próprio cadastro',
+  'player.self_password_change': 'trocou a própria senha',
+  'matchday.create_retroactive': 'lançou a ata retroativa de {alvo}',
 };
 
 // Quem clica ainda existe (ou some por meio de outra linha do proprio log);
@@ -50,7 +53,8 @@ export default function AdminAuditPage() {
       <Card title="Ações registradas">
         <p className="text-xs text-gray-500 mb-3">
           Quem fez o quê nas ações destrutivas ou sensíveis do sistema: apagar pelada, excluir
-          jogador, bloquear, trocar senha de outra pessoa e promover/remover administrador.
+          jogador, bloquear, trocar senha (de outra pessoa ou a própria), promover/remover
+          administrador, editar o próprio cadastro e lançar ata retroativa.
         </p>
 
         {entries.length === 0 && !loading ? (
@@ -63,6 +67,9 @@ export default function AdminAuditPage() {
                   <span className="font-medium text-gulag-cyan">{e.actor_name}</span>{' '}
                   {renderAction(e)}
                 </p>
+                {e.details && (
+                  <p className="text-xs text-gray-500">{renderDetails(e.details)}</p>
+                )}
                 <p className="text-xs text-gray-500">{formatDateTime(e.created_at)}</p>
               </li>
             ))}
@@ -81,8 +88,27 @@ export default function AdminAuditPage() {
   );
 }
 
+// Detalhes especificos de cada acao, guardados como json solto — so os que
+// fazem sentido pra leitura viram frase, o resto (se um dia sobrar algo
+// inesperado) aparece como "chave: valor" mesmo
+function renderDetails(details) {
+  if (details.nome_antes && details.nome_depois) {
+    return `nome: "${details.nome_antes}" → "${details.nome_depois}"${details.foto ? ' · trocou a foto' : ''}`;
+  }
+  if (details.foto) return 'trocou a foto';
+  if (details.motivo) return `motivo: ${details.motivo}`;
+  if (details.jogadores !== undefined) {
+    return `${details.jogadores} jogador(es) · ${details.times} time(s)`;
+  }
+  return Object.entries(details).map(([k, v]) => `${k}: ${v}`).join(' · ');
+}
+
 function renderAction(entry) {
   const template = ACTION_LABELS[entry.action] || entry.action;
+  // Acao sem {alvo} no texto (ex.: "editou o próprio cadastro") ja diz tudo
+  // sozinha — o autor e o alvo sao a mesma pessoa, nao repete o nome
+  if (!template.includes('{alvo}')) return template;
+
   const alvo = entry.target_label || `#${entry.target_id}`;
   const [before, after] = template.split('{alvo}');
 

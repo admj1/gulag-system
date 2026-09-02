@@ -91,6 +91,12 @@ async function getMe(req, res, next) {
 async function updateMe(req, res, next) {
   try {
     const { first_name, last_name, nickname, phone, email, photo_url, position } = req.body;
+
+    const { rows: before } = await pool.query(
+      `SELECT photo_url, ${displayNameSql()} AS name FROM players WHERE id = $1`, [req.user.id]
+    );
+    if (!before[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
+
     const { rows } = await pool.query(
       `UPDATE players SET
          first_name = COALESCE($1, first_name),
@@ -104,7 +110,25 @@ async function updateMe(req, res, next) {
        RETURNING ${PLAYER_FIELDS}`,
       [first_name, last_name, nickname || null, phone, email || null, photo_url, position, req.user.id]
     );
-    res.json(rows[0]);
+    const after = rows[0];
+
+    // So registra quando nome (nome+sobrenome+apelido, o que aparece nas
+    // listas) ou foto realmente mudaram — editar telefone/posicao nao e o
+    // que foi pedido para auditar aqui
+    const nameChanged = after.name !== before[0].name;
+    const photoChanged = photo_url !== undefined && photo_url !== before[0].photo_url;
+    if (nameChanged || photoChanged) {
+      await logAudit({
+        actorId: req.user.id, actorName: after.name,
+        action: 'player.self_update', targetType: 'player', targetId: req.user.id, targetLabel: after.name,
+        details: {
+          ...(nameChanged ? { nome_antes: before[0].name, nome_depois: after.name } : {}),
+          ...(photoChanged ? { foto: true } : {}),
+        },
+      });
+    }
+
+    res.json(after);
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'Telefone ou e-mail já cadastrado' });
@@ -137,6 +161,15 @@ async function changeMyPassword(req, res, next) {
        WHERE id = $2`,
       [passwordHash, req.user.id]
     );
+
+    // Fica registrado que foi o proprio jogador que trocou — util se alguem
+    // disser depois que perdeu o acesso e nao lembra de ter mudado a senha
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: 'player.self_password_change', targetType: 'player', targetId: req.user.id,
+      targetLabel: req.user.name,
+    });
+
     res.json({ ok: true });
   } catch (err) {
     next(err);
