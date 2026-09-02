@@ -74,11 +74,13 @@ function BackupCard() {
       const { data } = await api.post('/settings/backup-now');
       if (data.tooGrande) {
         toast.error('O backup ficou grande demais para anexar por e-mail. Veja o log do Railway.');
-      } else {
+      } else if (data.sent > 0) {
         toast.success(
           `Backup enviado para ${data.sent} de ${data.recipients} admin(s) — ${data.rows} linha(s), `
           + `${(data.bytes / 1024).toFixed(0)} KB.`
         );
+      } else {
+        toast.error(data.lastError || 'O servidor não conseguiu enviar. Veja o log do Railway.');
       }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao gerar o backup');

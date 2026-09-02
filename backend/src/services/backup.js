@@ -1,7 +1,7 @@
-const zlib = require('zlib');
 const pool = require('../config/db');
 const { displayNameSql } = require('../config/settings');
 const { deliver, MAIL_CONFIGURED } = require('./mailer');
+const { zipSingleFile } = require('./zip');
 
 // Todas as tabelas com dado de verdade (fora migrations/one_off_fixes, que sao
 // so controle interno). team_players nao tem coluna id propria.
@@ -64,24 +64,24 @@ async function sendWeeklyBackup() {
   }
 
   const payload = await buildBackupPayload();
-  const gz = zlib.gzipSync(Buffer.from(JSON.stringify(payload)), { level: 9 });
   const dataStr = payload.generated_at.slice(0, 10);
-  const filename = `gulag-backup-${dataStr}.json.gz`;
+  const zip = zipSingleFile(`gulag-backup-${dataStr}.json`, Buffer.from(JSON.stringify(payload)));
+  const filename = `gulag-backup-${dataStr}.zip`;
   const from = process.env.MAIL_FROM || process.env.SMTP_USER;
 
-  const tooGrande = gz.length > MAX_ATTACHMENT_BYTES;
+  const tooGrande = zip.length > MAX_ATTACHMENT_BYTES;
   const html = tooGrande
     ? `<p>O backup semanal do Gulag System (${dataStr}) ficou grande demais para anexar por e-mail
-       (${(gz.length / 1024 / 1024).toFixed(1)} MB). Peça para alguém com acesso técnico gerar uma
+       (${(zip.length / 1024 / 1024).toFixed(1)} MB). Peça para alguém com acesso técnico gerar uma
        cópia direto do banco.</p>`
     : `<p>Backup semanal do Gulag System, gerado em ${dataStr}: ${payload.total_rows} linha(s) em
-       ${TABLES.length} tabelas, compactado em ${(gz.length / 1024).toFixed(0)} KB.</p>
-       <p>O anexo é um <code>.json.gz</code> — descompacte e é um JSON com uma chave por tabela
-       (jogadores, peladas, súmulas, pagamentos...), pronto para reconstruir o banco na mão se um
-       dia precisar.</p>
+       ${TABLES.length} tabelas, compactado em ${(zip.length / 1024).toFixed(0)} KB.</p>
+       <p>O anexo é um <code>.zip</code> — descompacte (clique duas vezes ou "Extrair tudo",
+       funciona em qualquer sistema) e é um JSON com uma chave por tabela (jogadores, peladas,
+       súmulas, pagamentos...), pronto para reconstruir o banco na mão se um dia precisar.</p>
        <p>Guarde este e-mail. Se algo sumir, essa é a cópia.</p>`;
   const text = tooGrande
-    ? `Backup de ${dataStr} grande demais para anexar (${(gz.length / 1024 / 1024).toFixed(1)} MB).`
+    ? `Backup de ${dataStr} grande demais para anexar (${(zip.length / 1024 / 1024).toFixed(1)} MB).`
     : `Backup semanal do Gulag System (${dataStr}): ${payload.total_rows} linha(s). Guarde este e-mail.`;
 
   let sent = 0;
@@ -95,7 +95,7 @@ async function sendWeeklyBackup() {
         subject: `Backup semanal do Gulag System — ${dataStr}`,
         html,
         text,
-        attachments: tooGrande ? [] : [{ filename, content: gz }],
+        attachments: tooGrande ? [] : [{ filename, content: zip }],
       });
       sent += 1;
     } catch (err) {
@@ -107,7 +107,7 @@ async function sendWeeklyBackup() {
 
   return {
     configured: true, sent, failed, lastError, recipients: recipients.length,
-    rows: payload.total_rows, bytes: gz.length, tooGrande,
+    rows: payload.total_rows, bytes: zip.length, tooGrande,
   };
 }
 
