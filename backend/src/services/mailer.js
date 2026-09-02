@@ -47,7 +47,22 @@ function parseSender(from) {
   return match ? { name: match[1] || undefined, email: match[2] } : { email: String(from || '') };
 }
 
-async function sendViaBrevo({ from, to, subject, html, text }) {
+async function sendViaBrevo({ from, to, subject, html, text, attachments = [] }) {
+  const payload = {
+    sender: parseSender(from),
+    to: [{ email: to }],
+    subject,
+    htmlContent: html,
+    textContent: text,
+  };
+  // A API do Brevo pede o conteudo em base64, nao Buffer
+  if (attachments.length) {
+    payload.attachment = attachments.map((a) => ({
+      name: a.filename,
+      content: Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content,
+    }));
+  }
+
   const response = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
@@ -55,13 +70,7 @@ async function sendViaBrevo({ from, to, subject, html, text }) {
       'content-type': 'application/json',
       accept: 'application/json',
     },
-    body: JSON.stringify({
-      sender: parseSender(from),
-      to: [{ email: to }],
-      subject,
-      htmlContent: html,
-      textContent: text,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
@@ -71,12 +80,16 @@ async function sendViaBrevo({ from, to, subject, html, text }) {
   }
 }
 
-// Entrega uma mensagem pelo caminho disponivel
+// Entrega uma mensagem pelo caminho disponivel. Anexos extras (ex.: backup)
+// se somam ao logo, que continua indo em toda mensagem pelo SMTP.
 async function deliver(message) {
   if (HAS_BREVO) return sendViaBrevo(message);
   return getTransporter().sendMail({
     ...message,
-    attachments: HAS_LOGO ? [{ filename: 'logo.jpeg', path: LOGO_PATH, cid: LOGO_CID }] : [],
+    attachments: [
+      ...(HAS_LOGO ? [{ filename: 'logo.jpeg', path: LOGO_PATH, cid: LOGO_CID }] : []),
+      ...(message.attachments || []),
+    ],
   });
 }
 
@@ -283,4 +296,5 @@ async function sendMatchdayInvites(matchdayId, baseUrl, { onlyPlayerId = null } 
 
 module.exports = {
   sendMatchdayInvites, inviteRecipients, appBaseUrl, MAIL_CONFIGURED, DEFAULT_INVITE_HTML,
+  deliver,
 };

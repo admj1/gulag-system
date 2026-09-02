@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { DEFAULT_INVITE_HTML } = require('../services/mailer');
+const { sendWeeklyBackup } = require('../services/backup');
 
 async function get(req, res, next) {
   try {
@@ -32,4 +33,25 @@ async function update(req, res, next) {
   }
 }
 
-module.exports = { get, update };
+// Dispara o backup semanal na hora, para testar sem esperar domingo de manha
+async function backupNow(req, res, next) {
+  try {
+    const result = await sendWeeklyBackup();
+    if (!result.configured) {
+      return res.status(503).json({
+        error: 'Envio de e-mail não configurado no servidor'
+          + ' (BREVO_API_KEY + MAIL_FROM, ou SMTP_HOST/SMTP_USER/SMTP_PASS)',
+      });
+    }
+    if (result.recipients === 0) {
+      return res.status(400).json({
+        error: 'Nenhum admin ativo com e-mail cadastrado para receber o backup.',
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { get, update, backupNow };

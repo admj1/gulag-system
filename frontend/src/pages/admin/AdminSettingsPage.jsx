@@ -56,7 +56,49 @@ export default function AdminSettingsPage() {
       </Card>
 
       {settings && <InviteTemplateCard settings={settings} onSaved={setSettings} />}
+
+      <BackupCard />
     </div>
+  );
+}
+
+// Backup semanal: todo domingo de madrugada o sistema manda uma copia de
+// tudo (jogadores, peladas, sumulas, pagamentos...) por e-mail para os
+// admins. O botao aqui e so para testar sem esperar o domingo.
+function BackupCard() {
+  const [sending, setSending] = useState(false);
+
+  async function sendNow() {
+    setSending(true);
+    try {
+      const { data } = await api.post('/settings/backup-now');
+      if (data.tooGrande) {
+        toast.error('O backup ficou grande demais para anexar por e-mail. Veja o log do Railway.');
+      } else {
+        toast.success(
+          `Backup enviado para ${data.sent} de ${data.recipients} admin(s) — ${data.rows} linha(s), `
+          + `${(data.bytes / 1024).toFixed(0)} KB.`
+        );
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao gerar o backup');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Card title="Backup semanal">
+      <p className="text-xs text-gray-500 mb-3">
+        Todo domingo de madrugada o sistema manda uma cópia completa do banco (jogadores, peladas,
+        súmulas, pagamentos...) por e-mail para os administradores com e-mail cadastrado —
+        independente de qualquer coisa no Railway. Use o botão abaixo para testar agora, sem
+        esperar o domingo.
+      </p>
+      <Button variant="secondary" onClick={sendNow} disabled={sending}>
+        {sending ? 'Gerando e enviando...' : '📦 Enviar backup agora'}
+      </Button>
+    </Card>
   );
 }
 

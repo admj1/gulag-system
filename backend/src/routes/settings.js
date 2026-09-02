@@ -8,5 +8,6 @@ router.use(authenticate);
 
 router.get('/', controller.get);
 router.put('/', requireAdmin, controller.update);
+router.post('/backup-now', requireAdmin, controller.backupNow);
 
 module.exports = router;
