@@ -4,8 +4,8 @@ const { displayNameSql } = require('../config/settings');
 const { logAudit } = require('../services/audit');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
-  phone, email, photo_url, position, stars, role, player_type, blocked, mensalista_number,
-  active, is_owner, login_locked, exempt_monthly, auto_roster`;
+  phone, email, photo_url, position, stars, role, player_type, blocked, block_reason,
+  blocked_until, mensalista_number, active, is_owner, login_locked, exempt_monthly, auto_roster`;
 
 // Mensalistas seguem a propria numeracao; os demais ficam em ordem alfabetica
 const PLAYER_ORDER = `mensalista_number NULLS LAST, ${displayNameSql()}`;
@@ -65,7 +65,7 @@ async function list(req, res, next) {
 async function getById(req, res, next) {
   try {
     const { rows } = await pool.query(
-      `SELECT ${PLAYER_FIELDS}, block_reason FROM players WHERE id = $1`,
+      `SELECT ${PLAYER_FIELDS} FROM players WHERE id = $1`,
       [req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
@@ -78,7 +78,7 @@ async function getById(req, res, next) {
 async function getMe(req, res, next) {
   try {
     const { rows } = await pool.query(
-      `SELECT ${PLAYER_FIELDS}, block_reason FROM players WHERE id = $1`,
+      `SELECT ${PLAYER_FIELDS} FROM players WHERE id = $1`,
       [req.user.id]
     );
     res.json(rows[0]);
@@ -305,14 +305,25 @@ async function update(req, res, next) {
   }
 }
 
-// Admin: bloqueio por débito ou suspensão disciplinar
+// Admin: bloqueio por débito (sem prazo, sai só desbloqueando na mão) ou
+// suspensão disciplinar (com prazo, o job expireSuspensions libera sozinho
+// quando o prazo passa — ver jobs/expireSuspensions.js)
 async function setBlock(req, res, next) {
   try {
-    const { blocked, block_reason } = req.body;
+    const { blocked, block_reason, blocked_until } = req.body;
+
+    let until = null;
+    if (blocked && blocked_until) {
+      until = new Date(blocked_until);
+      if (Number.isNaN(until.getTime())) {
+        return res.status(400).json({ error: 'Prazo inválido' });
+      }
+    }
+
     const { rows } = await pool.query(
-      `UPDATE players SET blocked = $1, block_reason = $2 WHERE id = $3
-       RETURNING id, ${displayNameSql()} AS name, blocked, block_reason`,
-      [blocked, blocked ? block_reason : null, req.params.id]
+      `UPDATE players SET blocked = $1, block_reason = $2, blocked_until = $3 WHERE id = $4
+       RETURNING id, ${displayNameSql()} AS name, blocked, block_reason, blocked_until`,
+      [blocked, blocked ? block_reason : null, until, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
 
@@ -320,7 +331,7 @@ async function setBlock(req, res, next) {
       actorId: req.user.id, actorName: req.user.name,
       action: blocked ? 'player.block' : 'player.unblock',
       targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
-      details: blocked ? { motivo: block_reason || null } : null,
+      details: blocked ? { motivo: block_reason || null, ate: until ? until.toISOString() : null } : null,
     });
 
     res.json(rows[0]);

@@ -19,6 +19,7 @@ const integrationsRoutes = require('./routes/integrations');
 const auditRoutes = require('./routes/audit');
 const { scheduleWeeklyClose } = require('./jobs/closeWeeklyList');
 const { scheduleWeeklyBackup } = require('./jobs/weeklyBackup');
+const { scheduleExpireSuspensions } = require('./jobs/expireSuspensions');
 
 const app = express();
 
@@ -135,3 +136,4 @@ app.listen(PORT, HOST, () => {
 });
 scheduleWeeklyClose();
 scheduleWeeklyBackup();
+scheduleExpireSuspensions();

@@ -219,6 +219,57 @@ function StarSuggestions({ onApplied }) {
   );
 }
 
+// Duração da suspensão: indeterminado cobre o caso de bloqueio por débito
+// (sai só na mão, quando o admin desbloquear); as demais opções são para
+// suspensão disciplinar de verdade, liberada sozinha pelo job
+// jobs/expireSuspensions.js quando o prazo passa.
+const SUSPEND_DURATIONS = [
+  { value: '', label: 'Indeterminado (só desbloqueando na mão — ex: débito)' },
+  { value: '3', label: '3 dias' },
+  { value: '7', label: '1 semana' },
+  { value: '14', label: '2 semanas' },
+  { value: '30', label: '1 mês' },
+];
+
+function SuspendModal({ player, onClose, onConfirm }) {
+  const { register, handleSubmit, formState } = useForm({ defaultValues: { block_reason: '', days: '7' } });
+
+  async function onSubmit({ block_reason, days }) {
+    const blocked_until = days ? new Date(Date.now() + Number(days) * 86400000).toISOString() : null;
+    await onConfirm({ block_reason, blocked_until });
+  }
+
+  return (
+    <Modal title={`Suspender ${player.name}`} onClose={onClose}>
+      <form onSubmit={handleSubmit(onSubmit)} className="grid gap-3">
+        <Field label="Motivo *">
+          <textarea
+            {...register('block_reason', { required: true })}
+            rows={3}
+            placeholder="Débito em atraso, conduta antidesportiva, etc."
+            className={inputClass}
+          />
+        </Field>
+        <Field label="Duração">
+          <select {...register('days')} className={inputClass}>
+            {SUSPEND_DURATIONS.map((d) => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+        </Field>
+        <p className="text-xs text-gray-500">
+          Com prazo definido, o jogador é liberado sozinho quando o prazo passar — não precisa
+          lembrar de desbloquear.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button variant="danger" disabled={formState.isSubmitting}>Suspender</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function NewPlayerModal({ onClose, onCreated }) {
   const { register, handleSubmit, formState } = useForm({ defaultValues: { player_type: 'diarista', stars: 3 } });
 
@@ -302,7 +353,9 @@ function PlayerRow({ player, onChange, isOwner }) {
           <p className="text-xs text-gray-500">
             {player.stars}★
             {!player.active ? ' · inativo' : ''}
-            {player.blocked ? ' · bloqueado' : ''}
+            {player.blocked && (player.blocked_until
+              ? ` · suspenso até ${new Date(player.blocked_until).toLocaleDateString('pt-BR')}`
+              : ' · bloqueado')}
             {player.login_locked && <span className="text-red-400"> · senha bloqueada</span>}
             {isIncomplete(player) && <span className="text-amber-400"> · sem telefone</span>}
           </p>
@@ -317,6 +370,7 @@ function PlayerRow({ player, onChange, isOwner }) {
 function PlayerEditor({ player, onChange, isOwner }) {
   const [uploading, setUploading] = useState(false);
   const [changingTo, setChangingTo] = useState(null);
+  const [suspending, setSuspending] = useState(false);
   const [changeDate, setChangeDate] = useState(() => new Date().toISOString().slice(0, 10));
   const fileInput = useRef(null);
   const { register, handleSubmit, formState } = useForm({
@@ -436,20 +490,24 @@ function PlayerEditor({ player, onChange, isOwner }) {
     }
   }
 
-  async function toggleBlock() {
+  async function unblock() {
     try {
-      if (player.blocked) {
-        await api.patch(`/players/${player.id}/block`, { blocked: false });
-        toast.success('Cadastro desbloqueado');
-      } else {
-        const reason = window.prompt('Motivo do bloqueio (débito ou suspensão disciplinar):');
-        if (reason === null) return;
-        await api.patch(`/players/${player.id}/block`, { blocked: true, block_reason: reason });
-        toast.success('Cadastro bloqueado');
-      }
+      await api.patch(`/players/${player.id}/block`, { blocked: false });
+      toast.success('Cadastro liberado');
       onChange();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao alterar bloqueio');
+      toast.error(err.response?.data?.error || 'Erro ao liberar cadastro');
+    }
+  }
+
+  async function suspend({ block_reason, blocked_until }) {
+    try {
+      await api.patch(`/players/${player.id}/block`, { blocked: true, block_reason, blocked_until });
+      toast.success(blocked_until ? 'Jogador suspenso' : 'Cadastro bloqueado');
+      setSuspending(false);
+      onChange();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao suspender cadastro');
     }
   }
 
@@ -579,9 +637,12 @@ function PlayerEditor({ player, onChange, isOwner }) {
       </div>
 
       <div className="sm:col-span-2 border-t border-gulag-border pt-3 flex gap-2 flex-wrap">
-        <Button variant={player.blocked ? 'secondary' : 'danger'} onClick={toggleBlock}>
-          {player.blocked ? 'Desbloquear cadastro' : 'Bloquear cadastro'}
+        <Button variant={player.blocked ? 'secondary' : 'danger'} onClick={player.blocked ? unblock : () => setSuspending(true)}>
+          {player.blocked ? 'Liberar cadastro' : 'Suspender cadastro'}
         </Button>
+        {suspending && (
+          <SuspendModal player={player} onClose={() => setSuspending(false)} onConfirm={suspend} />
+        )}
 
         {player.login_locked && (
           <Button variant="secondary" onClick={unlockLogin}>
@@ -605,8 +666,13 @@ function PlayerEditor({ player, onChange, isOwner }) {
         )}
       </div>
 
-      {player.blocked && player.block_reason && (
-        <p className="sm:col-span-2 text-xs text-red-300">Motivo do bloqueio: {player.block_reason}</p>
+      {player.blocked && (
+        <p className="sm:col-span-2 text-xs text-red-300">
+          {player.block_reason && `Motivo: ${player.block_reason}`}
+          {player.blocked_until && (
+            <> {player.block_reason && '· '}Suspenso até {new Date(player.blocked_until).toLocaleString('pt-BR')}</>
+          )}
+        </p>
       )}
       <p className="sm:col-span-2 text-xs text-gray-500">
         Inativar tira o jogador das listas e mantém o histórico. Excluir só é possível
