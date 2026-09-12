@@ -17,12 +17,14 @@ const ACTION_LABELS = {
   'player.self_update': 'editou o próprio cadastro',
   'player.self_password_change': 'trocou a própria senha',
   'matchday.create_retroactive': 'lançou a ata retroativa de {alvo}',
+  'registration.approve': 'aprovou o cadastro de {alvo}',
+  'registration.reject': 'recusou o pedido de cadastro de {alvo}',
 };
 
 // Quem clica ainda existe (ou some por meio de outra linha do proprio log);
 // so faz sentido linkar quando o alvo nao foi excluido nesta mesma acao
 const LINKABLE = new Set(['player.block', 'player.unblock', 'player.password_reset',
-  'player.promote_admin', 'player.demote_admin']);
+  'player.promote_admin', 'player.demote_admin', 'registration.approve']);
 
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString('pt-BR', {

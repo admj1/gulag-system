@@ -556,6 +556,19 @@ async function closeMatchday(matchdayId) {
   try {
     await client.query('BEGIN');
 
+    // Quem nao confirmou nem avisou que nao ia ate o fechamento vira "nao vou"
+    // automaticamente — depois de fechada a lista nao faz sentido continuar
+    // "pendente" pra sempre, e a vaga foi liberada por falta de resposta tanto
+    // quanto seria por quem avisou. Vale para mensalista e goleiro fixo (os
+    // unicos que entram na ata como 'pending'; diarista so aparece confirmado).
+    await client.query(
+      `UPDATE confirmations c SET status = 'declined'
+       FROM players p
+       WHERE c.matchday_id = $1 AND c.player_id = p.id
+         AND p.player_type IN ('mensalista', 'goleiro') AND c.status = 'pending'`,
+      [matchdayId]
+    );
+
     // Mensalistas tem prioridade e podem confirmar ate o fechamento;
     // quem nao confirmou perde a vaga, que passa para a fila de diaristas.
     const { rows: mensalistasConfirmados } = await client.query(
@@ -563,12 +576,11 @@ async function closeMatchday(matchdayId) {
        WHERE c.matchday_id = $1 AND p.player_type = 'mensalista' AND c.status = 'confirmed'`,
       [matchdayId]
     );
-    // Quem simplesmente nao respondeu continua 'pending' (aparece como "nao confirmou"),
-    // diferente de quem avisou que nao vai, que fica 'declined'.
+    // Ja inclui quem acabou de virar 'declined' automaticamente acima
     const { rows: mensalistasAusentes } = await client.query(
       `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
        WHERE c.matchday_id = $1 AND p.player_type = 'mensalista'
-         AND c.status IN ('pending', 'declined')`,
+         AND c.status = 'declined'`,
       [matchdayId]
     );
     const { rows: goleiros } = await client.query(

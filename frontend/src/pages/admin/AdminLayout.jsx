@@ -2,6 +2,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 
 // A navegacao entre as areas do admin fica na sidebar; aqui so o titulo da secao
 const TITLES = {
+  '/admin/approvals': 'Aprovações de cadastro',
   '/admin/players': 'Jogadores',
   '/admin/matchdays': 'Gerenciamento de ATAS',
   '/admin/finance': 'Controle Financeiro',

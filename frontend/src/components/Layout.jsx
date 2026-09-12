@@ -13,6 +13,7 @@ const LINKS = [
 ];
 
 const ADMIN_LINKS = [
+  { to: '/admin/approvals', label: 'APROVAÇÕES DE CADASTRO' },
   { to: '/admin/players', label: 'CADASTRO DE JOGADORES' },
   { to: '/admin/matchdays', label: 'GERENCIAMENTO DE ATAS' },
   { to: '/admin/finance', label: 'CONTROLE FINANCEIRO' },

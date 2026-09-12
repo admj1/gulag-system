@@ -38,6 +38,39 @@ async function register(req, res, next) {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+
+    // Sistema sem nenhum admin ainda (primeiro uso): entra direto e vira
+    // dono, senao ninguem existiria para aprovar o proprio pedido dele. Com
+    // a organizacao ja rodando, o cadastro vira um pedido esperando um
+    // admin aprovar (ver controllers/registrationRequestsController.js).
+    const { rows: adminRows } = await pool.query(
+      `SELECT EXISTS (SELECT 1 FROM players WHERE role = 'admin') AS has_admin`
+    );
+
+    if (adminRows[0].has_admin) {
+      const { rows: pendingExisting } = await pool.query(
+        `SELECT id FROM registration_requests WHERE phone = $1 AND status = 'pending'`,
+        [phone]
+      );
+      if (pendingExisting[0]) {
+        return res.status(409).json({
+          error: 'Já existe uma solicitação de cadastro com este telefone aguardando aprovação.',
+          code: 'request_pending',
+        });
+      }
+
+      await pool.query(
+        `INSERT INTO registration_requests (first_name, last_name, nickname, phone, email, password_hash)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [first_name, last_name, nickname || null, phone, email || null, passwordHash]
+      );
+
+      return res.status(202).json({
+        pending: true,
+        message: 'Solicitação enviada! Assim que um administrador aprovar, você poderá entrar com essa senha.',
+      });
+    }
+
     const { rows } = await pool.query(
       `INSERT INTO players (first_name, last_name, nickname, phone, email, password_hash)
        VALUES ($1, $2, $3, $4, $5, $6)

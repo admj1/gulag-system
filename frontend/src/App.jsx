@@ -12,6 +12,7 @@ import MyProfilePage from './pages/MyProfilePage';
 import MyFinancePage from './pages/MyFinancePage';
 import RankingsPage from './pages/RankingsPage';
 import AdminLayout from './pages/admin/AdminLayout';
+import AdminApprovalsPage from './pages/admin/AdminApprovalsPage';
 import AdminPlayersPage from './pages/admin/AdminPlayersPage';
 import AdminMatchdaysPage from './pages/admin/AdminMatchdaysPage';
 import AdminMatchdayDetailPage from './pages/admin/AdminMatchdayDetailPage';
@@ -42,6 +43,7 @@ export default function App() {
           element={<ProtectedRoute adminOnly><AdminLayout /></ProtectedRoute>}
         >
           <Route index element={<Navigate to="players" replace />} />
+          <Route path="approvals" element={<AdminApprovalsPage />} />
           <Route path="players" element={<AdminPlayersPage />} />
           <Route path="matchdays" element={<AdminMatchdaysPage />} />
           <Route path="matchdays/:id" element={<AdminMatchdayDetailPage />} />

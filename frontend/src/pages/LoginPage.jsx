@@ -96,9 +96,9 @@ export default function LoginPage() {
           <Button disabled={formState.isSubmitting}>Entrar</Button>
         </form>
 
-        <p className="text-sm text-center mt-4 text-gray-400">
-          Não tem conta? <Link to="/register" className="text-gulag-cyan underline">Cadastre-se</Link>
-        </p>
+        <Link to="/register" className="block mt-4">
+          <Button type="button" variant="secondary" className="w-full">Solicitar cadastro</Button>
+        </Link>
         <p className="text-xs text-center mt-3 text-gray-600">
           Esqueceu a senha? Fale com o organizador para cadastrar uma nova.
         </p>

@@ -21,10 +21,13 @@ export function AuthProvider({ children }) {
     return data.player;
   }
 
+  // Se ja existe organizacao rodando, o cadastro vira um pedido esperando
+  // aprovacao (data.pending) e ninguem entra ainda. So no banco novo, sem
+  // nenhum admin, e que a pessoa entra direto (dono do sistema).
   async function register(payload) {
     const { data } = await api.post('/auth/register', payload);
-    persist(data.player, data.token);
-    return data.player;
+    if (!data.pending) persist(data.player, data.token);
+    return data;
   }
 
   function logout() {
