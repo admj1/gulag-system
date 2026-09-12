@@ -137,13 +137,13 @@ export default function RankingsPage() {
             <table className="w-full text-sm min-w-[760px]">
               <thead className="text-gray-400 text-left">
                 <tr className="border-b border-gulag-border">
-                  <th className="pb-2 pr-2 w-10">POS</th>
+                  <th className="pb-2 pr-2 w-10 text-center">POS</th>
                   <th className="pb-2 pr-2">JOGADOR</th>
-                  <th className="pb-2 px-2 text-right text-gulag-cyan">PTS</th>
+                  <th className="pb-2 px-2 text-center text-gulag-cyan">PTS</th>
                   {COLUMNS.map((c) => (
                     <th
                       key={c.key}
-                      className={`pb-2 px-2 text-right ${view === c.key ? 'font-bold text-gray-100 bg-gulag-cyan/10' : ''}`}
+                      className={`pb-2 px-2 text-center ${view === c.key ? 'font-bold text-gray-100 bg-gulag-cyan/10' : ''}`}
                     >
                       {c.label}
                     </th>
@@ -157,18 +157,18 @@ export default function RankingsPage() {
                     onClick={() => setSelected(p)}
                     className="border-b border-gulag-border last:border-0 text-gray-300 hover:bg-gulag-surface-2 cursor-pointer"
                   >
-                    <td className="py-2 pr-2 text-gray-500">
+                    <td className="py-2 pr-2 text-center text-gray-500">
                       {(() => {
                         const pos = view === 'geral' ? p.position : i + 1;
                         return MEDALS[pos - 1] || pos;
                       })()}
                     </td>
                     <td className="py-2 pr-2 text-gray-100 truncate max-w-[160px]">{p.name}</td>
-                    <td className="py-2 px-2 text-right font-bold text-gulag-cyan text-base">{p.points}</td>
+                    <td className="py-2 px-2 text-center font-bold text-gulag-cyan text-base">{p.points}</td>
                     {COLUMNS.map((c) => (
                       <td
                         key={c.key}
-                        className={`py-2 px-2 text-right ${c.className || ''} ${
+                        className={`py-2 px-2 text-center ${c.className || ''} ${
                           view === c.key ? 'font-bold bg-gulag-cyan/10' : ''
                         }`}
                       >
