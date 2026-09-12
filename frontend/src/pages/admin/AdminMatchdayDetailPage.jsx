@@ -220,7 +220,15 @@ export default function AdminMatchdayDetailPage() {
     )));
 
     try {
-      await api.patch(`/matchdays/${id}/teams/assign`, { player_id: playerId, team_id: Number(teamId) });
+      const { data } = await api.patch(`/matchdays/${id}/teams/assign`, { player_id: playerId, team_id: Number(teamId) });
+      // Time de origem pode ter perdido o dono do proprio nome (o sorteio
+      // batiza com quem tem mais estrelas) — o servidor ja recalculou, so
+      // aplica aqui sem recarregar tudo, pro arrasto continuar sem piscar
+      if (data.renamed) {
+        setTeams((current) => current.map((t) => (
+          t.id === data.renamed.team_id ? { ...t, name: data.renamed.name } : t
+        )));
+      }
     } catch (err) {
       setTeams(previous);
       toast.error(err.response?.data?.error || 'Erro ao mover jogador');

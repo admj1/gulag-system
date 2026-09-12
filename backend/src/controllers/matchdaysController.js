@@ -724,19 +724,63 @@ async function renameTeam(req, res, next) {
   }
 }
 
-// Admin: move um jogador confirmado para outro time do sorteio
+// Admin: move um jogador confirmado para outro time do sorteio. Se o time de
+// origem estava com o nome do proprio jogador que saiu (o sorteio batiza o
+// time com quem tem mais estrelas), o nome e recalculado sozinho a partir de
+// quem sobrou, com a mesma regra do sorteio — assim ninguem fica jogando no
+// "time do Fulano" sem o Fulano. Um nome dado a mao pelo admin (que nao seja
+// o nome de quem esta saindo) nunca muda sozinho.
 async function moveTeamPlayer(req, res, next) {
+  const client = await pool.connect();
   try {
     const { player_id, team_id } = req.body;
-    await pool.query(
+    await client.query('BEGIN');
+
+    const { rows: fromRows } = await client.query(
+      `SELECT t.id, t.name FROM team_players tp
+       JOIN teams t ON t.id = tp.team_id
+       WHERE tp.player_id = $1 AND t.matchday_id = $2`,
+      [player_id, req.params.id]
+    );
+    const fromTeam = fromRows[0] || null;
+
+    const { rows: playerRows } = await client.query(
+      `SELECT ${displayNameSql()} AS name FROM players WHERE id = $1`, [player_id]
+    );
+    const playerName = playerRows[0]?.name;
+
+    await client.query(
       `DELETE FROM team_players WHERE player_id = $1
        AND team_id IN (SELECT id FROM teams WHERE matchday_id = $2)`,
       [player_id, req.params.id]
     );
-    await pool.query('INSERT INTO team_players (team_id, player_id) VALUES ($1, $2)', [team_id, player_id]);
-    res.json({ ok: true });
+    await client.query('INSERT INTO team_players (team_id, player_id) VALUES ($1, $2)', [team_id, player_id]);
+
+    let renamed = null;
+    if (fromTeam && fromTeam.id !== Number(team_id) && fromTeam.name === playerName) {
+      const { rows: remaining } = await client.query(
+        `SELECT ${displayNameSql('p')} AS name FROM team_players tp
+         JOIN players p ON p.id = tp.player_id
+         WHERE tp.team_id = $1
+         ORDER BY p.stars DESC LIMIT 1`,
+        [fromTeam.id]
+      );
+      const { rows: allTeams } = await client.query(
+        'SELECT id FROM teams WHERE matchday_id = $1 ORDER BY id', [req.params.id]
+      );
+      const idx = Math.max(allTeams.findIndex((t) => t.id === fromTeam.id), 0);
+      const novoNome = (remaining[0]?.name || `Time ${String.fromCharCode(65 + idx)}`).slice(0, 40);
+      await client.query('UPDATE teams SET name = $1 WHERE id = $2', [novoNome, fromTeam.id]);
+      renamed = { team_id: fromTeam.id, name: novoNome };
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, renamed });
   } catch (err) {
+    await client.query('ROLLBACK');
     next(err);
+  } finally {
+    client.release();
   }
 }
 
