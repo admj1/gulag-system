@@ -8,21 +8,37 @@ import { inputClass, Card, Field, EmptyState, Avatar, ScrollArea, matchDateLabel
 // por filtro. "geral" usa a posicao oficial (com desempate); os demais so
 // reordenam pelo proprio numero, do maior para o menor.
 const VIEWS = [
-  { key: 'geral', label: 'Ranking Geral', column: 'PTS', punitivo: false },
-  { key: 'goals', label: 'Gols', column: 'GOLS', punitivo: false },
-  { key: 'assists', label: 'Assistências', column: 'ASSIST.', punitivo: false },
-  { key: 'tp_count', label: 'Time da Pelada', column: 'TP', punitivo: false },
-  { key: 'artilheiro_count', label: 'Artilheiro do Dia', column: 'ART.', punitivo: false },
-  { key: 'garcom_count', label: 'Garçom do Dia', column: 'GAR.', punitivo: false },
-  { key: 'dobradinha_count', label: 'Dobradinhas', column: 'DOB.', punitivo: false },
-  { key: 'presencas', label: 'Presenças', column: 'PRES.', punitivo: false },
-  { key: 'faltas', label: 'Faltas', column: 'FALTAS', punitivo: true },
-  { key: 'yellow_cards', label: 'Cartões amarelos', column: 'AM', punitivo: true },
-  { key: 'blue_cards', label: 'Cartões azuis', column: 'AZ', punitivo: true },
-  { key: 'red_cards', label: 'Cartões vermelhos', column: 'VM', punitivo: true },
+  { key: 'geral', label: 'Ranking Geral', punitivo: false },
+  { key: 'goals', label: 'Gols', punitivo: false },
+  { key: 'assists', label: 'Assistências', punitivo: false },
+  { key: 'tp_count', label: 'Time da Pelada', punitivo: false },
+  { key: 'artilheiro_count', label: 'Artilheiro do Dia', punitivo: false },
+  { key: 'garcom_count', label: 'Garçom do Dia', punitivo: false },
+  { key: 'dobradinha_count', label: 'Dobradinhas', punitivo: false },
+  { key: 'presencas', label: 'Presenças', punitivo: false },
+  { key: 'faltas', label: 'Faltas', punitivo: true },
+  { key: 'yellow_cards', label: 'Cartões amarelos', punitivo: true },
+  { key: 'blue_cards', label: 'Cartões azuis', punitivo: true },
+  { key: 'red_cards', label: 'Cartões vermelhos', punitivo: true },
 ];
 
 const MEDALS = ['🥇', '🥈', '🥉'];
+
+// Colunas fixas da tabela (fora PTS, que tem tratamento proprio). A coluna do
+// criterio selecionado em VIEWS so ganha destaque aqui — nao duplica.
+const COLUMNS = [
+  { key: 'goals', label: 'GOLS' },
+  { key: 'assists', label: 'ASSIST.' },
+  { key: 'tp_count', label: 'TP' },
+  { key: 'artilheiro_count', label: 'ART.' },
+  { key: 'garcom_count', label: 'GAR.' },
+  { key: 'dobradinha_count', label: 'DOB.' },
+  { key: 'presencas', label: 'PRES.' },
+  { key: 'faltas', label: 'FALTAS', className: 'text-amber-400' },
+  { key: 'yellow_cards', label: 'AM', className: 'text-amber-400' },
+  { key: 'blue_cards', label: 'AZ', className: 'text-blue-400' },
+  { key: 'red_cards', label: 'VM', className: 'text-red-400' },
+];
 
 export default function RankingsPage() {
   const [seasons, setSeasons] = useState([]);
@@ -124,20 +140,14 @@ export default function RankingsPage() {
                   <th className="pb-2 pr-2 w-10">POS</th>
                   <th className="pb-2 pr-2">JOGADOR</th>
                   <th className="pb-2 px-2 text-right text-gulag-cyan">PTS</th>
-                  {currentView.key !== 'geral' && (
-                    <th className="pb-2 px-2 text-right font-bold text-gray-100">{currentView.column}</th>
-                  )}
-                  <th className="pb-2 px-2 text-right">GOLS</th>
-                  <th className="pb-2 px-2 text-right">ASSIST.</th>
-                  <th className="pb-2 px-2 text-right">TP</th>
-                  <th className="pb-2 px-2 text-right">ART.</th>
-                  <th className="pb-2 px-2 text-right">GAR.</th>
-                  <th className="pb-2 px-2 text-right">DOB.</th>
-                  <th className="pb-2 px-2 text-right">PRES.</th>
-                  <th className="pb-2 px-2 text-right">FALTAS</th>
-                  <th className="pb-2 px-2 text-right">AM</th>
-                  <th className="pb-2 px-2 text-right">AZ</th>
-                  <th className="pb-2 pl-2 text-right">VM</th>
+                  {COLUMNS.map((c) => (
+                    <th
+                      key={c.key}
+                      className={`pb-2 px-2 text-right ${view === c.key ? 'font-bold text-gray-100 bg-gulag-cyan/10' : ''}`}
+                    >
+                      {c.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -155,20 +165,16 @@ export default function RankingsPage() {
                     </td>
                     <td className="py-2 pr-2 text-gray-100 truncate max-w-[160px]">{p.name}</td>
                     <td className="py-2 px-2 text-right font-bold text-gulag-cyan text-base">{p.points}</td>
-                    {currentView.key !== 'geral' && (
-                      <td className="py-2 px-2 text-right font-bold text-gray-100">{p[currentView.key]}</td>
-                    )}
-                    <td className="py-2 px-2 text-right">{p.goals}</td>
-                    <td className="py-2 px-2 text-right">{p.assists}</td>
-                    <td className="py-2 px-2 text-right">{p.tp_count}</td>
-                    <td className="py-2 px-2 text-right">{p.artilheiro_count}</td>
-                    <td className="py-2 px-2 text-right">{p.garcom_count}</td>
-                    <td className="py-2 px-2 text-right">{p.dobradinha_count}</td>
-                    <td className="py-2 px-2 text-right">{p.presencas}</td>
-                    <td className="py-2 px-2 text-right text-amber-400">{p.faltas}</td>
-                    <td className="py-2 px-2 text-right text-amber-400">{p.yellow_cards}</td>
-                    <td className="py-2 px-2 text-right text-blue-400">{p.blue_cards}</td>
-                    <td className="py-2 pl-2 text-right text-red-400">{p.red_cards}</td>
+                    {COLUMNS.map((c) => (
+                      <td
+                        key={c.key}
+                        className={`py-2 px-2 text-right ${c.className || ''} ${
+                          view === c.key ? 'font-bold bg-gulag-cyan/10' : ''
+                        }`}
+                      >
+                        {p[c.key]}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
