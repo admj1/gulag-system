@@ -601,6 +601,159 @@ async function rankings(req, res, next) {
   }
 }
 
+// PESOS do Ranking Geral — soma direta, nao ha ponderacao alguma alem destas
+// constantes. Mudar aqui muda o ranking inteiro, entao qualquer ajuste de
+// regra do pelada passa por aqui e so aqui.
+const RANKING_PESOS = {
+  gol: 1, assistencia: 1, timeDaPelada: 5, artilheiroDoDia: 3, garcomDoDia: 3,
+  dobradinha: 2, presenca: 2, faltaAposConfirmar: -5, amarelo: -1, azul: -2, vermelho: -5,
+};
+
+function calculaPontos(r) {
+  const p = RANKING_PESOS;
+  return r.goals * p.gol
+    + r.assists * p.assistencia
+    + r.tp_count * p.timeDaPelada
+    + r.artilheiro_count * p.artilheiroDoDia
+    + r.garcom_count * p.garcomDoDia
+    + r.dobradinha_count * p.dobradinha
+    + r.presencas * p.presenca
+    + r.faltas * p.faltaAposConfirmar
+    + r.yellow_cards * p.amarelo
+    + r.blue_cards * p.azul
+    + r.red_cards * p.vermelho;
+}
+
+// Pontuacao disciplinar (so a parte negativa dos cartoes) para o desempate:
+// "menor pontuacao disciplinar negativa" = menos pontos perdidos em cartao.
+function disciplinaNegativa(r) {
+  return r.yellow_cards * 1 + r.blue_cards * 2 + r.red_cards * 5;
+}
+
+// Sequencia de desempate do Ranking Geral (regra 16 da especificacao):
+// 1) mais Times da Pelada, 2) mais presencas, 3) mais gols+assist.,
+// 4) mais artilharias+garcons, 5) menos faltas, 6) menor punicao disciplinar.
+// Persistindo empate, os dois ficam na mesma posicao (ranking "denso").
+function comparaRanking(a, b) {
+  return b.points - a.points
+    || b.tp_count - a.tp_count
+    || b.presencas - a.presencas
+    || (b.goals + b.assists) - (a.goals + a.assists)
+    || (b.artilheiro_count + b.garcom_count) - (a.artilheiro_count + a.garcom_count)
+    || a.faltas - b.faltas
+    || disciplinaNegativa(a) - disciplinaNegativa(b);
+}
+
+// RANKING GERAL — pontuacao unica por mensalista, derivada 100% dos dados ja
+// registrados nas atas (sumula, times, confirmacoes). Nao existe uma segunda
+// fonte manual de pontos: mudou a ata, muda o ranking sozinho.
+//
+// Regras reaproveitadas do que ja existia (nada de regra concorrente nova):
+// - Time da Pelada: BEST_TEAM_SQL (mesma usada em "curiosidades" e no
+//   perfil do jogador) — time com mais vitorias no dia, desempate por menos
+//   derrotas; empate total na lideranca nao credita ninguem naquele dia.
+// - Presenca e falta apos confirmacao: player_match_stats.absent, que ja e
+//   exatamente a distincao usada para cobrar diaria (presente) ou multa
+//   (confirmou e faltou) — a mesma coluna, dois nomes para a mesma coisa.
+// - Artilheiro/garcom do dia: precisa considerar TODOS os participantes da
+//   pelada (linha e goleiro), nao so os mensalistas — um goleiro ou diarista
+//   pode ter feito mais gols no dia e ai nenhum mensalista leva o titulo
+//   naquele dia. So depois de apurado o "dono do dia" e que o filtro de
+//   mensalista entra, na tabela final.
+async function rankingGeral(req, res, next) {
+  try {
+    const seasonId = req.query.seasonId || null;
+
+    const { rows } = await pool.query(
+      `WITH escopo AS (
+         SELECT id FROM matchdays WHERE $1::int IS NULL OR season_id = $1
+       ),
+       presencas AS (
+         SELECT player_id,
+                COUNT(*) FILTER (WHERE NOT absent)::int AS presencas,
+                COUNT(*) FILTER (WHERE absent)::int AS faltas,
+                COALESCE(SUM(goals) FILTER (WHERE NOT absent), 0)::int AS goals,
+                COALESCE(SUM(assists) FILTER (WHERE NOT absent), 0)::int AS assists,
+                COALESCE(SUM(yellow_cards) FILTER (WHERE NOT absent), 0)::int AS yellow_cards,
+                COALESCE(SUM(blue_cards) FILTER (WHERE NOT absent), 0)::int AS blue_cards,
+                COALESCE(SUM(red_cards) FILTER (WHERE NOT absent), 0)::int AS red_cards
+         FROM player_match_stats
+         WHERE matchday_id IN (SELECT id FROM escopo)
+         GROUP BY player_id
+       ),
+       campeoes AS (${BEST_TEAM_SQL}),
+       tp AS (
+         SELECT tp.player_id, COUNT(*)::int AS tp_count
+         FROM campeoes c
+         JOIN team_players tp ON tp.team_id = c.id
+         LEFT JOIN player_match_stats s ON s.matchday_id = c.matchday_id AND s.player_id = tp.player_id
+         WHERE COALESCE(s.absent, FALSE) = FALSE
+           AND c.matchday_id IN (SELECT id FROM escopo)
+         GROUP BY tp.player_id
+       ),
+       dia_totais AS (
+         SELECT matchday_id, player_id, goals, assists FROM player_match_stats
+         WHERE NOT absent AND matchday_id IN (SELECT id FROM escopo)
+         UNION ALL
+         SELECT matchday_id, player_id, goals, assists FROM goalkeeper_match_stats
+         WHERE matchday_id IN (SELECT id FROM escopo)
+       ),
+       dia_max AS (
+         SELECT matchday_id, MAX(goals) AS max_goals, MAX(assists) AS max_assists
+         FROM dia_totais GROUP BY matchday_id
+       ),
+       titulos_dia AS (
+         SELECT dt.matchday_id, dt.player_id,
+                (dt.goals > 0 AND dt.goals = dm.max_goals) AS artilheiro,
+                (dt.assists > 0 AND dt.assists = dm.max_assists) AS garcom
+         FROM dia_totais dt JOIN dia_max dm ON dm.matchday_id = dt.matchday_id
+       ),
+       titulos AS (
+         SELECT player_id,
+                COUNT(*) FILTER (WHERE artilheiro)::int AS artilheiro_count,
+                COUNT(*) FILTER (WHERE garcom)::int AS garcom_count,
+                COUNT(*) FILTER (WHERE artilheiro AND garcom)::int AS dobradinha_count
+         FROM titulos_dia
+         GROUP BY player_id
+       )
+       SELECT p.id, ${displayNameSql('p')} AS name, p.photo_url, p.mensalista_number,
+              COALESCE(pr.goals, 0) AS goals,
+              COALESCE(pr.assists, 0) AS assists,
+              COALESCE(tp.tp_count, 0) AS tp_count,
+              COALESCE(ti.artilheiro_count, 0) AS artilheiro_count,
+              COALESCE(ti.garcom_count, 0) AS garcom_count,
+              COALESCE(ti.dobradinha_count, 0) AS dobradinha_count,
+              COALESCE(pr.presencas, 0) AS presencas,
+              COALESCE(pr.faltas, 0) AS faltas,
+              COALESCE(pr.yellow_cards, 0) AS yellow_cards,
+              COALESCE(pr.blue_cards, 0) AS blue_cards,
+              COALESCE(pr.red_cards, 0) AS red_cards
+       FROM players p
+       LEFT JOIN presencas pr ON pr.player_id = p.id
+       LEFT JOIN tp ON tp.player_id = p.id
+       LEFT JOIN titulos ti ON ti.player_id = p.id
+       WHERE p.player_type = 'mensalista'`,
+      [seasonId]
+    );
+
+    const withPoints = rows.map((r) => ({ ...r, points: calculaPontos(r) }));
+    withPoints.sort(comparaRanking);
+
+    // Posicao "densa": empatados ficam na mesma posicao, o proximo pula a
+    // quantidade de gente empatada (1, 1, 3, 4...)
+    let position = 0;
+    for (let i = 0; i < withPoints.length; i += 1) {
+      if (i === 0 || comparaRanking(withPoints[i], withPoints[i - 1]) !== 0) position = i + 1;
+      withPoints[i].position = position;
+    }
+
+    res.json({ pesos: RANKING_PESOS, players: withPoints });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   playerProfile, rankings, rankingPeriods, curiosities, comparePlayers, starSuggestions,
+  rankingGeral, BEST_TEAM_SQL,
 };

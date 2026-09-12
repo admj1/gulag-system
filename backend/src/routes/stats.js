@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.use(authenticate);
 
+router.get('/ranking-geral', controller.rankingGeral);
 router.get('/rankings', controller.rankings);
 router.get('/rankings/periods', controller.rankingPeriods);
 router.get('/curiosities', controller.curiosities);
