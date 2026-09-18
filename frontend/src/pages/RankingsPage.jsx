@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import toast from 'react-hot-toast';
 import api from '../api/client';
-import { gerarArteJogador, compartilharArte } from '../components/shareCard';
+import ShareArtModal from '../components/ShareArtModal';
 import { inputClass, Button, Card, Field, EmptyState, Avatar, ScrollArea, matchDateLabel } from '../components/ui';
 
 // Cada visao e so uma coluna diferente para ordenar a mesma lista — os dados
@@ -206,22 +205,7 @@ export default function RankingsPage() {
 // mesma ordem da formula da especificacao — o objetivo e o jogador conseguir
 // conferir a propria pontuacao a mao.
 function PlayerBreakdown({ player: p, pesos, seasonName, onClose }) {
-  const [gerando, setGerando] = useState(false);
-
-  // Arte para o jogador postar: desenhada no proprio celular dele, com a
-  // paleta e o logo do app (ver components/shareCard.js)
-  async function gerarArte() {
-    setGerando(true);
-    try {
-      const blob = await gerarArteJogador({ player: p, seasonName });
-      const resultado = await compartilharArte(blob, `gulag-${p.name.replace(/\s+/g, '-').toLowerCase()}.png`);
-      if (resultado === 'baixado') toast.success('Arte salva! Agora é só postar.');
-    } catch (err) {
-      toast.error(err.message || 'Erro ao gerar a arte');
-    } finally {
-      setGerando(false);
-    }
-  }
+  const [mostrandoArte, setMostrandoArte] = useState(false);
 
   const linhas = [
     [p.goals, 'gol(s)', pesos.gol],
@@ -245,10 +229,14 @@ function PlayerBreakdown({ player: p, pesos, seasonName, onClose }) {
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <Avatar src={p.photo_url} name={p.name} />
         <Link to={`/players/${p.id}`} className="text-sm text-gulag-cyan underline">Ver perfil completo</Link>
-        <Button variant="secondary" onClick={gerarArte} disabled={gerando} className="ml-auto">
-          {gerando ? 'Gerando...' : '📤 Gerar arte para postar'}
+        <Button variant="secondary" onClick={() => setMostrandoArte(true)} className="ml-auto">
+          📤 Gerar arte para postar
         </Button>
       </div>
+
+      {mostrandoArte && (
+        <ShareArtModal player={p} seasonName={seasonName} onClose={() => setMostrandoArte(false)} />
+      )}
       {linhas.length === 0 ? (
         <p className="text-sm text-gray-500">Sem lançamentos nesta temporada ainda.</p>
       ) : (

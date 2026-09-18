@@ -108,11 +108,154 @@ function estatistica(ctx, { valor, rotulo, cx, cy }) {
   comEspacamento(ctx, '1px', (dx) => ctx.fillText(rotulo, cx + dx, cy + 38));
 }
 
+// ---------------------------------------------------------------------------
+// Fundos artisticos
+//
+// Sao desenhados (e nao imagens prontas) por tres motivos praticos: usam o hex
+// exato da paleta, ficam nitidos em qualquer tamanho e nao somam megabytes de
+// asset ao app. Todos ficam de proposito em alpha baixo: o fundo e moldura,
+// quem tem que aparecer e o jogador.
+// ---------------------------------------------------------------------------
+
+const CIANO = (alfa) => `rgba(45, 216, 211, ${alfa})`;
+
+// Cobre o miolo com a propria cor de fundo, deixando o desenho so nas bordas.
+// E o que impede a textura de brigar com o nome e a pontuacao.
+function desvaneceCentro(ctx, raio) {
+  const g = ctx.createRadialGradient(W / 2, 560, 0, W / 2, 560, raio);
+  g.addColorStop(0, CORES.fundo);
+  g.addColorStop(0.65, CORES.fundo);
+  g.addColorStop(1, 'rgba(11, 13, 16, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// Brilho suave atras da pontuacao
+function fundoClassico(ctx) {
+  const brilho = ctx.createRadialGradient(W / 2, 860, 0, W / 2, 860, 520);
+  brilho.addColorStop(0, CIANO(0.16));
+  brilho.addColorStop(1, CIANO(0));
+  ctx.fillStyle = brilho;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// Campo visto de cima: faixas de corte, circulo central emoldurando a foto e
+// arcos de escanteio
+function fundoCampo(ctx) {
+  const faixa = (W - 56) / 8;
+  for (let i = 1; i < 8; i += 2) {
+    ctx.fillStyle = CIANO(0.022);
+    ctx.fillRect(28 + i * faixa, 28, faixa, H - 56);
+  }
+
+  ctx.strokeStyle = CIANO(0.12);
+  ctx.lineWidth = 4;
+
+  ctx.beginPath();
+  ctx.moveTo(28, 400);
+  ctx.lineTo(W - 28, 400);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(W / 2, 400, 250, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(W / 2, 400, 9, 0, Math.PI * 2);
+  ctx.fillStyle = CIANO(0.18);
+  ctx.fill();
+
+  const cantos = [
+    [28, 28, 0, Math.PI / 2],
+    [W - 28, 28, Math.PI / 2, Math.PI],
+    [W - 28, H - 28, Math.PI, Math.PI * 1.5],
+    [28, H - 28, Math.PI * 1.5, Math.PI * 2],
+  ];
+  for (const [x, y, de, ate] of cantos) {
+    ctx.beginPath();
+    ctx.arc(x, y, 80, de, ate);
+    ctx.stroke();
+  }
+
+  fundoClassico(ctx);
+}
+
+// Feixes de refletor descendo do alto, como luz de quadra
+function fundoHolofote(ctx) {
+  const feixes = [
+    { x: 170, topo: 90, base: 520 },
+    { x: W - 170, topo: 90, base: 520 },
+    { x: W / 2, topo: 60, base: 760 },
+  ];
+  for (const feixe of feixes) {
+    const luz = ctx.createLinearGradient(0, 0, 0, H);
+    luz.addColorStop(0, CIANO(0.13));
+    luz.addColorStop(0.55, CIANO(0.035));
+    luz.addColorStop(1, CIANO(0));
+    ctx.fillStyle = luz;
+    ctx.beginPath();
+    ctx.moveTo(feixe.x - feixe.topo / 2, 20);
+    ctx.lineTo(feixe.x + feixe.topo / 2, 20);
+    ctx.lineTo(feixe.x + feixe.base / 2, H);
+    ctx.lineTo(feixe.x - feixe.base / 2, H);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+// Malha tecnica nas bordas, com o miolo limpo
+function fundoGrade(ctx) {
+  ctx.strokeStyle = CIANO(0.16);
+  ctx.lineWidth = 2;
+  const passo = 60;
+  for (let x = 28; x <= W - 28; x += passo) {
+    ctx.beginPath();
+    ctx.moveTo(x, 28);
+    ctx.lineTo(x, H - 28);
+    ctx.stroke();
+  }
+  for (let y = 28; y <= H - 28; y += passo) {
+    ctx.beginPath();
+    ctx.moveTo(28, y);
+    ctx.lineTo(W - 28, y);
+    ctx.stroke();
+  }
+  desvaneceCentro(ctx, 620);
+  fundoClassico(ctx);
+}
+
+// Raios saindo de tras do jogador
+function fundoRaios(ctx) {
+  ctx.save();
+  ctx.translate(W / 2, 430);
+  const total = 24;
+  for (let i = 0; i < total; i += 2) {
+    ctx.fillStyle = CIANO(0.075);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, 1500, (i / total) * Math.PI * 2, ((i + 1) / total) * Math.PI * 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+  desvaneceCentro(ctx, 480);
+  fundoClassico(ctx);
+}
+
+// A ordem aqui e a ordem que aparece para o jogador escolher
+export const FUNDOS = [
+  { key: 'classico', label: 'Clássico', desenhar: fundoClassico },
+  { key: 'campo', label: 'Campo', desenhar: fundoCampo },
+  { key: 'holofote', label: 'Holofote', desenhar: fundoHolofote },
+  { key: 'grade', label: 'Grade', desenhar: fundoGrade },
+  { key: 'raios', label: 'Raios', desenhar: fundoRaios },
+];
+
 /**
  * Monta a arte do jogador e devolve um PNG (Blob).
  * Recebe a linha do Ranking Geral como ela ja vem da API.
  */
-export async function gerarArteJogador({ player, seasonName }) {
+export async function gerarArteJogador({ player, seasonName, fundo = 'classico' }) {
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -123,15 +266,12 @@ export async function gerarArteJogador({ player, seasonName }) {
     carregaImagem(player.photo_url),
   ]);
 
-  // Fundo + brilho ciano suave atras da pontuacao
   ctx.fillStyle = CORES.fundo;
   ctx.fillRect(0, 0, W, H);
 
-  const brilho = ctx.createRadialGradient(W / 2, 860, 0, W / 2, 860, 520);
-  brilho.addColorStop(0, 'rgba(45, 216, 211, 0.16)');
-  brilho.addColorStop(1, 'rgba(45, 216, 211, 0)');
-  ctx.fillStyle = brilho;
-  ctx.fillRect(0, 0, W, H);
+  // Fundo escolhido pelo jogador (cai no classico se vier algo desconhecido)
+  const estilo = FUNDOS.find((f) => f.key === fundo) || FUNDOS[0];
+  estilo.desenhar(ctx);
 
   // Moldura
   ctx.strokeStyle = CORES.borda;
