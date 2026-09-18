@@ -8,6 +8,7 @@ const TITLES = {
   '/admin/finance': 'Controle Financeiro',
   '/admin/whatsapp': 'Confirmação por WhatsApp',
   '/admin/auditoria': 'Auditoria',
+  '/admin/arte': 'Arte para redes sociais',
   '/admin/settings': 'Configurações',
 };
 

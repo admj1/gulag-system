@@ -19,6 +19,8 @@ const ADMIN_LINKS = [
   { to: '/admin/finance', label: 'CONTROLE FINANCEIRO' },
   { to: '/admin/whatsapp', label: 'WHATSAPP' },
   { to: '/admin/auditoria', label: 'AUDITORIA' },
+  // Em stand by: so o admin ve, enquanto a arte de redes nao e liberada
+  { to: '/admin/arte', label: 'ARTE (EM TESTE)' },
   { to: '/admin/settings', label: 'CONFIGURAÇÕES' },
 ];
 

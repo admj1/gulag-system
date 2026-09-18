@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
-import ShareArtModal from '../components/ShareArtModal';
-import { inputClass, Button, Card, Field, EmptyState, Avatar, ScrollArea, matchDateLabel } from '../components/ui';
+import { inputClass, Card, Field, EmptyState, Avatar, ScrollArea, matchDateLabel } from '../components/ui';
 
 // Cada visao e so uma coluna diferente para ordenar a mesma lista — os dados
 // vem todos numa unica chamada (GET /stats/ranking-geral), sem round-trip
@@ -188,12 +187,7 @@ export default function RankingsPage() {
       )}
 
       {selected && data && (
-        <PlayerBreakdown
-          player={selected}
-          pesos={data.pesos}
-          seasonName={currentSeason?.name}
-          onClose={() => setSelected(null)}
-        />
+        <PlayerBreakdown player={selected} pesos={data.pesos} onClose={() => setSelected(null)} />
       )}
 
       <Curiosities />
@@ -204,9 +198,7 @@ export default function RankingsPage() {
 // Memoria do calculo: so mostra as linhas que realmente contribuiram, na
 // mesma ordem da formula da especificacao — o objetivo e o jogador conseguir
 // conferir a propria pontuacao a mao.
-function PlayerBreakdown({ player: p, pesos, seasonName, onClose }) {
-  const [mostrandoArte, setMostrandoArte] = useState(false);
-
+function PlayerBreakdown({ player: p, pesos, onClose }) {
   const linhas = [
     [p.goals, 'gol(s)', pesos.gol],
     [p.assists, 'assistência(s)', pesos.assistencia],
@@ -226,17 +218,10 @@ function PlayerBreakdown({ player: p, pesos, seasonName, onClose }) {
       title={`${p.name} — ${p.points} PTS`}
       action={<button onClick={onClose} className="text-gray-400 text-xl leading-none px-2">×</button>}
     >
-      <div className="flex items-center gap-3 mb-3 flex-wrap">
+      <div className="flex items-center gap-3 mb-3">
         <Avatar src={p.photo_url} name={p.name} />
         <Link to={`/players/${p.id}`} className="text-sm text-gulag-cyan underline">Ver perfil completo</Link>
-        <Button variant="secondary" onClick={() => setMostrandoArte(true)} className="ml-auto">
-          📤 Gerar arte para postar
-        </Button>
       </div>
-
-      {mostrandoArte && (
-        <ShareArtModal player={p} seasonName={seasonName} onClose={() => setMostrandoArte(false)} />
-      )}
       {linhas.length === 0 ? (
         <p className="text-sm text-gray-500">Sem lançamentos nesta temporada ainda.</p>
       ) : (
