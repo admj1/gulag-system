@@ -77,8 +77,13 @@ export default function AdminMatchdayDetailPage() {
   // Considera o que esta na tela, para o destaque aparecer ja ao digitar
   const champion = bestTeam(teams.map((t) => ({ ...t, ...teamResults[t.id] })));
 
+  // Um toque anda um passo: sem resposta → confirmado (✓) → não vai (❌) → sem
+  // resposta. Marcar "não vai" deixa a pessoa na lista com o X, em vez de tirar
+  // ela — e dá para andar o ciclo quantas vezes precisar, nada trava.
+  const PROXIMO_STATUS = { confirmed: 'declined', declined: 'pending' };
+
   async function toggleConfirmation(entry) {
-    const status = entry.status === 'confirmed' ? 'pending' : 'confirmed';
+    const status = PROXIMO_STATUS[entry.status] || 'confirmed';
     try {
       await api.patch(`/matchdays/${id}/confirmations/${entry.player_id}`, { status });
       load();
@@ -381,7 +386,10 @@ export default function AdminMatchdayDetailPage() {
       </Card>
 
       <p className="text-xs text-gray-500 -mb-2">
-        Toque em um nome para marcar ou desmarcar a presença.
+        Toque em um nome para andar entre <span className="text-gray-400">sem resposta</span> →{' '}
+        <span className="text-emerald-400">confirmado ✓</span> →{' '}
+        <span className="text-red-400">não vai ❌</span>. Quem está como "não vai" continua na
+        lista e fica de fora da súmula — o jogador também pode mudar sozinho a qualquer momento.
       </p>
       <AtaList
         confirmations={confirmations}

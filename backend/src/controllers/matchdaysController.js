@@ -268,8 +268,15 @@ async function getConfirmations(req, res, next) {
   }
 }
 
-// Jogador avisa que nao vai ("Nao vou"). Mensalista fica marcado como recusado
-// na lista; diarista simplesmente sai da fila.
+// Jogador avisa que nao vai ("Nao vou"). Vale para todo mundo, inclusive
+// diarista: fica na lista com o X em vez de sumir dela, porque o grupo precisa
+// enxergar quem ja avisou que nao vem — some da lista e ninguem sabe se a
+// pessoa desistiu ou se nunca viu o aviso. Da para voltar atras a qualquer
+// momento (confirm() por cima).
+//
+// A vaga na fila e liberada (queue_position zerada) para quem estava atras
+// subir; se voltar atras depois, entra no fim da fila, como qualquer um que
+// chega agora.
 async function declineOwn(req, res, next) {
   try {
     const { rows: matchdayRows } = await pool.query(
@@ -278,17 +285,6 @@ async function declineOwn(req, res, next) {
     if (!matchdayRows[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
     if (matchdayRows[0].status !== 'open' && req.user.role !== 'admin') {
       return res.status(409).json({ error: 'A lista desta pelada já foi fechada' });
-    }
-
-    const { rows: playerRows } = await pool.query(
-      'SELECT player_type FROM players WHERE id = $1', [req.user.id]
-    );
-    if (playerRows[0]?.player_type === 'diarista') {
-      await pool.query(
-        'DELETE FROM confirmations WHERE matchday_id = $1 AND player_id = $2',
-        [req.params.id, req.user.id]
-      );
-      return res.json({ status: 'removed' });
     }
 
     const { rows } = await pool.query(
@@ -416,7 +412,9 @@ async function invitePlayer(req, res, next) {
   }
 }
 
-// Admin marca/desmarca a presenca de qualquer jogador na ata
+// Admin marca a presenca de qualquer jogador na ata: confirmado, "nao vai"
+// (X, mas continua na lista) ou de volta a pendente. Pode ir e voltar quantas
+// vezes precisar — nada aqui e definitivo.
 async function setConfirmation(req, res, next) {
   const client = await pool.connect();
   try {
@@ -439,7 +437,12 @@ async function setConfirmation(req, res, next) {
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (matchday_id, player_id) DO UPDATE SET
          status = EXCLUDED.status,
-         queue_position = COALESCE(confirmations.queue_position, EXCLUDED.queue_position)
+         -- Quem passa a "nao vai" solta a vaga na fila, igual a quando o
+         -- proprio jogador avisa (ver declineOwn)
+         queue_position = CASE
+           WHEN EXCLUDED.status = 'declined' THEN NULL
+           ELSE COALESCE(confirmations.queue_position, EXCLUDED.queue_position)
+         END
        RETURNING *`,
       [req.params.id, req.params.playerId, status, queuePosition]
     );
