@@ -388,8 +388,8 @@ export default function AdminMatchdayDetailPage() {
       <p className="text-xs text-gray-500 -mb-2">
         Toque em um nome para andar entre <span className="text-gray-400">sem resposta</span> →{' '}
         <span className="text-emerald-400">confirmado ✓</span> →{' '}
-        <span className="text-red-400">não vai ❌</span>. Quem está como "não vai" continua na
-        lista e fica de fora da súmula — o jogador também pode mudar sozinho a qualquer momento.
+        <span className="text-red-400">não vai ❌</span>. Dá para mudar a qualquer momento — o
+        jogador também muda sozinho.
       </p>
       <AtaList
         confirmations={confirmations}

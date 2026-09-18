@@ -86,9 +86,7 @@ function AtaRow({ position, entry, onToggle, onRemove, canEdit, currentPlayerId,
         ? 'text-amber-400'
         : 'text-gray-400';
 
-  // "nao vai" escrito, e nao so o X: na lista corrida do celular o icone
-  // sozinho deixa duvida se a pessoa avisou que nao vem ou se so nao respondeu
-  const label = isWaitlist ? 'espera' : isDeclined ? 'não vai' : null;
+  const label = isWaitlist ? 'espera' : null;
   const removable = canRemove(entry);
 
   const content = (
@@ -103,11 +101,7 @@ function AtaRow({ position, entry, onToggle, onRemove, canEdit, currentPlayerId,
         )}
       </span>
       {isMe && <span className="text-[10px] text-gulag-cyan border border-gulag-cyan/50 rounded px-1 shrink-0">você</span>}
-      {label && (
-        <span className={`text-xs shrink-0 ${isDeclined ? 'text-red-400' : 'text-gray-500'}`}>
-          {label}
-        </span>
-      )}
+      {label && <span className="text-xs text-gray-500 shrink-0">{label}</span>}
       {isConfirmed && <span className="text-emerald-400 text-xs shrink-0">✓</span>}
       {isDeclined && <span className="text-xs shrink-0" title="Não vai">❌</span>}
     </>
