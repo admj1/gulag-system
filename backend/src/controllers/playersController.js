@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { displayNameSql } = require('../config/settings');
 const { logAudit } = require('../services/audit');
+const { limpaTelefone } = require('../utils/text');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
   phone, email, photo_url, position, stars, role, player_type, blocked, block_reason,
@@ -196,9 +197,12 @@ async function unlockLogin(req, res, next) {
 async function create(req, res, next) {
   try {
     const {
-      first_name, last_name, nickname, phone, email, password,
+      first_name, last_name, nickname, email, password,
       position, stars, player_type, mensalista_number,
     } = req.body;
+    // Telefone colado de outro app pode trazer caractere invisivel junto
+    // (ver utils/text.js) — limpa antes de gravar
+    const phone = limpaTelefone(req.body.phone);
     if (!first_name) {
       return res.status(400).json({ error: 'Nome é obrigatório' });
     }
@@ -229,8 +233,11 @@ async function update(req, res, next) {
   try {
     const {
       first_name, last_name, nickname, position, stars, photo_url,
-      mensalista_number, phone, email, password, exempt_monthly, auto_roster,
+      mensalista_number, email, password, exempt_monthly, auto_roster,
     } = req.body;
+    // Mantem undefined quando o campo nao veio (o resto do codigo usa isso
+    // para decidir se mexe ou nao no telefone), so limpa quando veio de verdade
+    const phone = req.body.phone !== undefined ? limpaTelefone(req.body.phone) : undefined;
     const number = parseMensalistaNumber(mensalista_number);
 
     // Numero e exclusivo de mensalista, para nao ocupar vaga de quem e da lista fixa

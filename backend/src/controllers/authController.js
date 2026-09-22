@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const { displayNameSql } = require('../config/settings');
+const { limpaTelefone } = require('../utils/text');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
   phone, email, photo_url, position, stars, role, player_type, is_owner, active`;
@@ -16,7 +17,11 @@ function signToken(player) {
 
 async function register(req, res, next) {
   try {
-    const { first_name, last_name, nickname, phone, email, password } = req.body;
+    const { first_name, last_name, nickname, email, password } = req.body;
+    // Telefone colado de apps como WhatsApp pode trazer caractere invisivel
+    // de formatacao (ver utils/text.js) — limpa antes de qualquer coisa,
+    // inclusive da checagem de duplicata logo abaixo
+    const phone = limpaTelefone(req.body.phone);
     if (!first_name || !last_name || !phone || !password) {
       return res.status(400).json({ error: 'Nome, sobrenome, telefone e senha são obrigatórios' });
     }
@@ -111,7 +116,10 @@ const LOCKED_MESSAGE = 'Senha bloqueada por tentativas erradas. '
 async function login(req, res, next) {
   try {
     const { phone, email, password } = req.body;
-    const identifier = phone || email;
+    // Mesmo cuidado do cadastro: quem cola o telefone de outro app pode
+    // trazer um caractere invisivel junto, e ai nunca bateria com o
+    // telefone limpo que esta salvo
+    const identifier = limpaTelefone(phone) || email;
     const { rows } = await pool.query(
       `SELECT ${PLAYER_FIELDS}, password_hash, blocked, block_reason,
               failed_login_attempts, login_locked
