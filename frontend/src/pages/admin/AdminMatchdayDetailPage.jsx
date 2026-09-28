@@ -265,11 +265,15 @@ export default function AdminMatchdayDetailPage() {
     setSaving(true);
     try {
       const payload = {
-        playerStats: linePlayers.map((c) => {
+        // So quem esta em algum time: e exatamente quem tem campos na sumula
+        // abaixo. Confirmado que ficou de fora dos times nao jogou — mandar
+        // uma linha zerada para ele contava como presenca (e diaria, se
+        // diarista) num dia em que ele nem entrou em campo.
+        playerStats: linePlayers.filter((c) => playerTeamId[c.player_id]).map((c) => {
           const s = playerStats[c.player_id] || {};
           return {
             player_id: c.player_id,
-            team_id: playerTeamId[c.player_id] || null,
+            team_id: playerTeamId[c.player_id],
             goals: Number(s.goals) || 0,
             assists: Number(s.assists) || 0,
             yellow_cards: Number(s.yellow_cards) || 0,

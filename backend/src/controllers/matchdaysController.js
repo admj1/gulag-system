@@ -1129,7 +1129,21 @@ async function submitSummary(req, res, next) {
       [req.params.id]
     );
 
+    // Na sumula so entra quem esta em algum time. Confirmado que ficou de
+    // fora dos times nao jogou: uma linha zerada para ele contava como
+    // presenca no historico e no Ranking Geral, e gerava diaria para
+    // diarista, num dia em que a pessoa nem entrou em campo.
+    const { rows: escalados } = await client.query(
+      `SELECT tp.player_id FROM team_players tp
+       JOIN teams t ON t.id = tp.team_id
+       WHERE t.matchday_id = $1`,
+      [req.params.id]
+    );
+    const emTime = new Set(escalados.map((r) => r.player_id));
+
     for (const s of playerStats) {
+      if (!emTime.has(Number(s.player_id))) continue;
+
       await client.query(
         `INSERT INTO player_match_stats
            (matchday_id, player_id, team_id, goals, assists, yellow_cards, blue_cards, red_cards, absent)
@@ -1169,6 +1183,17 @@ async function submitSummary(req, res, next) {
          chargeType === 'multa' ? settings.absence_fine : settings.daily_fee]
       );
     }
+
+    // Tira linha zerada de quem nao esta em time nenhum (sobra de antes
+    // desta regra existir). Linha com gol, assistencia ou cartao lancado
+    // nunca e apagada aqui — lancamento de verdade nao some calado.
+    await client.query(
+      `DELETE FROM player_match_stats
+       WHERE matchday_id = $1
+         AND player_id <> ALL($2::int[])
+         AND goals + assists + yellow_cards + blue_cards + red_cards = 0`,
+      [req.params.id, [...emTime]]
+    );
 
     for (const g of goalkeeperStats) {
       await client.query(
