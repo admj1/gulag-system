@@ -17,6 +17,10 @@ async function create(req, res, next) {
       `INSERT INTO seasons (name, year, start_date, end_date) VALUES ($1, $2, $3, $4) RETURNING *`,
       [name, year, start_date, end_date || null]
     );
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: 'season.create', targetType: 'season', targetId: rows[0].id, targetLabel: rows[0].name,
+    });
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -36,6 +40,10 @@ async function update(req, res, next) {
       [name, year, start_date, end_date || null, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Temporada não encontrada' });
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: 'season.update', targetType: 'season', targetId: rows[0].id, targetLabel: rows[0].name,
+    });
     res.json(rows[0]);
   } catch (err) {
     next(err);

@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { DEFAULT_INVITE_HTML } = require('../services/mailer');
 const { sendWeeklyBackup } = require('../services/backup');
+const { logAudit } = require('../services/audit');
 
 async function get(req, res, next) {
   try {
@@ -15,6 +16,7 @@ async function get(req, res, next) {
 async function update(req, res, next) {
   try {
     const { monthly_fee, daily_fee, absence_fine, match_time, invite_html } = req.body;
+    const { rows: antes } = await pool.query('SELECT * FROM settings WHERE id = 1');
     const { rows } = await pool.query(
       `UPDATE settings SET
          monthly_fee = COALESCE($1, monthly_fee),
@@ -27,6 +29,23 @@ async function update(req, res, next) {
       [monthly_fee, daily_fee, absence_fine, match_time,
        invite_html !== undefined, invite_html ?? null]
     );
+
+    // Valores (mensalidade, diaria, multa, horario) com de/para; o modelo do
+    // e-mail e um HTML enorme, entao so registra que mudou
+    const ROTULOS = { monthly_fee: 'mensalidade', daily_fee: 'diária', absence_fine: 'multa', match_time: 'horário' };
+    const mudou = {};
+    for (const [campo, rotulo] of Object.entries(ROTULOS)) {
+      if (String(antes[0]?.[campo]) !== String(rows[0][campo])) {
+        mudou[rotulo] = { de: antes[0]?.[campo], para: rows[0][campo] };
+      }
+    }
+    if ((antes[0]?.invite_html ?? null) !== (rows[0].invite_html ?? null)) mudou['modelo do convite'] = 'alterado';
+    if (Object.keys(mudou).length > 0) {
+      await logAudit({
+        actorId: req.user.id, actorName: req.user.name,
+        action: 'settings.update', targetType: 'settings', details: mudou,
+      });
+    }
     res.json({ ...rows[0], invite_html_default: DEFAULT_INVITE_HTML });
   } catch (err) {
     next(err);
@@ -48,6 +67,10 @@ async function backupNow(req, res, next) {
         error: 'Nenhum admin ativo com e-mail cadastrado para receber o backup.',
       });
     }
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name, action: 'settings.backup_now', targetType: 'settings',
+      details: { enviados: result.sent, falhas: result.failed },
+    });
     res.json(result);
   } catch (err) {
     next(err);

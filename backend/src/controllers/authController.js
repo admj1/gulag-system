@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const { displayNameSql } = require('../config/settings');
 const { limpaTelefone } = require('../utils/text');
+const { logAudit } = require('../services/audit');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
   phone, email, photo_url, position, stars, role, player_type, is_owner, active`;
@@ -70,6 +71,11 @@ async function register(req, res, next) {
         [first_name, last_name, nickname || null, phone, email || null, passwordHash]
       );
 
+      await logAudit({
+        actorId: null, actorName: `${first_name} ${last_name}`.trim(),
+        action: 'registration.request', targetType: 'registration_request',
+        targetLabel: `${first_name} ${last_name}`.trim(), details: { telefone: phone },
+      });
       return res.status(202).json({
         pending: true,
         message: 'Solicitação enviada! Assim que um administrador aprovar, você poderá entrar com essa senha.',
@@ -144,6 +150,11 @@ async function login(req, res, next) {
         [attempts, lock, player.id]
       );
       if (lock) {
+        await logAudit({
+          actorId: null, actorName: 'sistema',
+          action: 'player.login_locked', targetType: 'player', targetId: player.id, targetLabel: player.name,
+          details: { tentativas: attempts },
+        });
         return res.status(423).json({ error: LOCKED_MESSAGE, code: 'login_locked' });
       }
       return res.status(401).json({

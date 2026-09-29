@@ -1,6 +1,21 @@
 const pool = require('../config/db');
 const { displayNameSql, getSettings } = require('../config/settings');
 const { monthlyMemberSql, openDebtsFor } = require('../services/debts');
+const { logAudit, nomeJogador, dataPelada } = require('../services/audit');
+
+// Mexer em dinheiro de alguem e das coisas que mais precisam de rastro: quem
+// deu baixa (ou reabriu) o que, de quem, e de qual referencia.
+async function auditaCobranca(req, action, { player_id, type, matchday_id, reference_month, reference_year, amount }) {
+  const referencia = matchday_id
+    ? `pelada ${await dataPelada(matchday_id)}`
+    : `${String(reference_month).padStart(2, '0')}/${reference_year}`;
+  await logAudit({
+    actorId: req.user.id, actorName: req.user.name,
+    action, targetType: 'player', targetId: Number(player_id),
+    targetLabel: await nomeJogador(player_id),
+    details: { tipo: type, referencia, ...(amount != null ? { valor: Number(amount) } : {}) },
+  });
+}
 
 // A regra de quem entra na cobranca de um mes mora em services/debts, porque a
 // confirmacao de presenca tambem precisa dela. Aqui $1 = mes e $2 = ano.
@@ -62,6 +77,9 @@ async function setMonthlyStatus(req, res, next) {
          AND reference_month = $2 AND reference_year = $3`,
         [player_id, month, year]
       );
+      await auditaCobranca(req, 'finance.mark_pending', {
+        player_id, type: 'mensalidade', reference_month: month, reference_year: year,
+      });
       return res.json({ status: 'pending' });
     }
 
@@ -76,7 +94,10 @@ async function setMonthlyStatus(req, res, next) {
       [player_id, month, year, settings.monthly_fee, paid_at || null]
     );
 
-    if (rows[0]) return res.json(rows[0]);
+    if (rows[0]) {
+      await auditaCobranca(req, 'finance.mark_paid', rows[0]);
+      return res.json(rows[0]);
+    }
 
     const { rows: updated } = await pool.query(
       `UPDATE payments SET status = 'paid', paid_at = COALESCE($4::timestamptz, now())
@@ -85,6 +106,7 @@ async function setMonthlyStatus(req, res, next) {
        RETURNING *`,
       [player_id, month, year, paid_at || null]
     );
+    if (updated[0]) await auditaCobranca(req, 'finance.mark_paid', updated[0]);
     res.json(updated[0]);
   } catch (err) {
     next(err);
@@ -211,6 +233,10 @@ async function setMonthlyStatusForAll(req, res, next) {
          RETURNING id`,
         [month, year]
       );
+      await logAudit({
+        actorId: req.user.id, actorName: req.user.name, action: 'finance.month_all', targetType: 'finance',
+        targetLabel: `${String(month).padStart(2, '0')}/${year}`, details: { pago: false, alterados: rows.length },
+      });
       return res.json({ changed: rows.length });
     }
 
@@ -238,6 +264,11 @@ async function setMonthlyStatusForAll(req, res, next) {
       [month, year, paid_at || null]
     );
 
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name, action: 'finance.month_all', targetType: 'finance',
+      targetLabel: `${String(month).padStart(2, '0')}/${year}`,
+      details: { pago: true, alterados: created.length + updated.length },
+    });
     res.json({ changed: created.length + updated.length });
   } catch (err) {
     next(err);
@@ -300,6 +331,7 @@ async function markPaid(req, res, next) {
       [req.params.id, req.body?.paid_at || null]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Cobrança não encontrada' });
+    await auditaCobranca(req, 'finance.mark_paid', rows[0]);
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -318,6 +350,10 @@ async function payAllPending(req, res, next) {
        RETURNING id`,
       [req.body?.paid_at || null]
     );
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name, action: 'finance.pay_all_pending',
+      targetType: 'finance', details: { quitadas: rows.length },
+    });
     res.json({ paid: rows.length });
   } catch (err) {
     next(err);
@@ -331,6 +367,7 @@ async function markPending(req, res, next) {
       [req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Cobrança não encontrada' });
+    await auditaCobranca(req, 'finance.mark_pending', rows[0]);
     res.json(rows[0]);
   } catch (err) {
     next(err);

@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const pool = require('../config/db');
 const { closeMatchday } = require('../controllers/matchdaysController');
+const { logAudit, dataPelada } = require('../services/audit');
 
 // De hora em hora (no minuto 0), fecha a lista de toda pelada aberta com prazo
 // vencido. O prazo e a vespera da pelada as 17:00 — sexta 17h para a pelada
@@ -15,7 +16,12 @@ function scheduleWeeklyClose() {
       );
       for (const matchday of rows) {
         console.log(`Fechando lista da pelada ${matchday.id} (prazo vencido)`);
-        await closeMatchday(matchday.id);
+        const resumo = await closeMatchday(matchday.id);
+        await logAudit({
+          actorId: null, actorName: 'sistema',
+          action: 'matchday.close', targetType: 'matchday', targetId: matchday.id,
+          targetLabel: await dataPelada(matchday.id), details: { automatico: true, ...resumo },
+        });
       }
     } catch (err) {
       console.error('Falha ao fechar lista semanal:', err);

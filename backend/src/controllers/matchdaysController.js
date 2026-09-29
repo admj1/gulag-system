@@ -5,8 +5,17 @@ const {
   sendMatchdayInvites, inviteRecipients, appBaseUrl, MAIL_CONFIGURED,
 } = require('../services/mailer');
 const { confirmationBlock } = require('../services/debts');
-const { logAudit } = require('../services/audit');
+const { logAudit, logAuditAta, dataPelada } = require('../services/audit');
 const { listActivePlayers } = require('./playersController');
+
+// Registro de acao sobre a pelada inteira (lancar, fechar, sortear, sumula...)
+async function auditaPelada(req, action, matchdayId, details = null) {
+  await logAudit({
+    actorId: req.user?.id, actorName: req.user?.name,
+    action, targetType: 'matchday', targetId: Number(matchdayId),
+    targetLabel: await dataPelada(matchdayId), details,
+  });
+}
 
 // Prazo da lista: vespera da pelada, 17:00 no horario de Brasilia ($2 = data
 // da pelada). Antes o prazo era a propria hora da pelada gravada em UTC —
@@ -23,6 +32,7 @@ async function create(req, res, next) {
        VALUES ($1, $2, $3) RETURNING *`,
       [season_id, match_date, confirmation_deadline]
     );
+    await auditaPelada(req, 'matchday.create', rows[0].id);
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -131,6 +141,10 @@ async function createFromRoster(req, res, next) {
         .catch((err) => console.error('Falha ao disparar os avisos por e-mail:', err));
     }
 
+    await auditaPelada(req, 'matchday.create', matchday.id, {
+      ...(confirm_all ? { ja_confirmada: true } : {}),
+      aviso_por_email: !!(notify && !confirm_all),
+    });
     res.status(201).json({ ...matchday, notified });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -162,6 +176,9 @@ async function notifyMatchday(req, res, next) {
         error: 'Seu cadastro está sem e-mail. Preencha em "Meu perfil" para receber o teste.',
       });
     }
+    await auditaPelada(req, 'matchday.notify', req.params.id, {
+      ...(test ? { teste: true } : {}), destinatarios: result.recipients,
+    });
     res.json({ ...result, test });
   } catch (err) {
     next(err);
@@ -300,6 +317,7 @@ async function declineOwn(req, res, next) {
        RETURNING status`,
       [req.params.id, req.user.id]
     );
+    await logAuditAta(req, 'ata.decline', req.user.id, req.params.id);
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -333,6 +351,7 @@ async function cancelOwnConfirmation(req, res, next) {
         [req.params.id, req.user.id]
       );
     }
+    await logAuditAta(req, 'ata.cancel', req.user.id, req.params.id);
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -409,6 +428,7 @@ async function invitePlayer(req, res, next) {
     );
 
     await client.query('COMMIT');
+    await logAuditAta(req, 'ata.invite', invitedId, req.params.id, player_id ? {} : { cadastro_novo: true });
     res.status(201).json(rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -452,6 +472,7 @@ async function setConfirmation(req, res, next) {
        RETURNING *`,
       [req.params.id, req.params.playerId, status, queuePosition]
     );
+    await logAuditAta(req, 'ata.admin_status', req.params.playerId, req.params.id, { status });
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -493,6 +514,7 @@ async function removeConfirmation(req, res, next) {
       'DELETE FROM confirmations WHERE matchday_id = $1 AND player_id = $2',
       [req.params.id, req.params.playerId]
     );
+    await logAuditAta(req, 'ata.remove', req.params.playerId, req.params.id);
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -551,6 +573,7 @@ async function confirm(req, res, next) {
        RETURNING *`,
       [req.params.id, playerId, invited_by_player_id || null, queuePosition]
     );
+    await logAuditAta(req, 'ata.confirm', playerId, req.params.id);
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -643,6 +666,7 @@ async function closeMatchday(matchdayId) {
 async function closeList(req, res, next) {
   try {
     const summary = await closeMatchday(req.params.id);
+    await auditaPelada(req, 'matchday.close', req.params.id, summary);
     res.json(summary);
   } catch (err) {
     next(err);
@@ -687,6 +711,9 @@ async function drawTeams(req, res, next) {
       created.push({ ...team, players: buckets[i].players, totalStars: buckets[i].totalStars });
     }
 
+    await auditaPelada(req, 'matchday.draw_teams', req.params.id, {
+      times: created.length, jogadores: players.length,
+    });
     res.json(created);
   } catch (err) {
     next(err);
@@ -722,11 +749,15 @@ async function renameTeam(req, res, next) {
     const name = String(req.body?.name || '').trim().slice(0, 40);
     if (!name) return res.status(400).json({ error: 'Informe o nome do time' });
 
+    const { rows: antes } = await pool.query(
+      'SELECT name FROM teams WHERE id = $1 AND matchday_id = $2', [req.params.teamId, req.params.id]
+    );
     const { rows } = await pool.query(
       'UPDATE teams SET name = $1 WHERE id = $2 AND matchday_id = $3 RETURNING id, name',
       [name, req.params.teamId, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Time não encontrado nesta pelada' });
+    await auditaPelada(req, 'matchday.rename_team', req.params.id, { de: antes[0]?.name, para: name });
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -784,6 +815,12 @@ async function moveTeamPlayer(req, res, next) {
     }
 
     await client.query('COMMIT');
+    const { rows: destino } = await pool.query('SELECT name FROM teams WHERE id = $1', [team_id]);
+    await logAuditAta(req, 'matchday.move_player', player_id, req.params.id, {
+      ...(fromTeam ? { de: fromTeam.name } : {}),
+      para: destino[0]?.name,
+      ...(renamed ? { time_renomeado: renamed.name } : {}),
+    });
     res.json({ ok: true, renamed });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1118,9 +1155,12 @@ async function submitSummary(req, res, next) {
     const { playerStats = [], goalkeeperStats = [], teamResults = [] } = req.body;
 
     const { rows: matchdayRows } = await client.query(
-      'SELECT season_id FROM matchdays WHERE id = $1', [req.params.id]
+      'SELECT season_id, status FROM matchdays WHERE id = $1', [req.params.id]
     );
     const seasonId = matchdayRows[0]?.season_id || null;
+    // Sumula ja salva antes e sendo mudada: e exatamente o que a auditoria
+    // precisa mostrar (quem corrigiu um gol, um cartao, uma falta...)
+    const reedicao = matchdayRows[0]?.status === 'played';
 
     for (const t of teamResults) {
       await client.query(
@@ -1217,6 +1257,10 @@ async function submitSummary(req, res, next) {
 
     await client.query(`UPDATE matchdays SET status = 'played' WHERE id = $1`, [req.params.id]);
     await client.query('COMMIT');
+    await auditaPelada(req, 'matchday.summary', req.params.id, {
+      ...(reedicao ? { reedicao: true } : {}),
+      jogadores: emTime.size, goleiros: goalkeeperStats.length,
+    });
     res.json({ ok: true });
   } catch (err) {
     await client.query('ROLLBACK');

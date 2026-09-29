@@ -28,4 +28,40 @@ async function logAudit({ actorId, actorName, action, targetType, targetId, targ
   }
 }
 
-module.exports = { logAudit };
+// Rotulos prontos para o registro: nome como aparece nas listas e data da
+// pelada. Falha aqui vira null — rotulo faltando nunca pode derrubar a acao.
+async function nomeJogador(id, client = pool) {
+  try {
+    const { rows } = await client.query(
+      `SELECT TRIM(COALESCE(NULLIF(nickname, ''), first_name || ' ' || last_name)) AS nome
+       FROM players WHERE id = $1`, [id]
+    );
+    return rows[0]?.nome || null;
+  } catch {
+    return null;
+  }
+}
+
+async function dataPelada(id, client = pool) {
+  try {
+    const { rows } = await client.query(
+      `SELECT to_char(match_date, 'YYYY-MM-DD') AS dia FROM matchdays WHERE id = $1`, [id]
+    );
+    return rows[0]?.dia || null;
+  } catch {
+    return null;
+  }
+}
+
+// Atalho para acao sobre um jogador dentro de uma pelada (ata, times):
+// o alvo e o jogador, e a pelada vai nos detalhes.
+async function logAuditAta(req, action, playerId, matchdayId, extra = {}) {
+  await logAudit({
+    actorId: req.user?.id, actorName: req.user?.name,
+    action, targetType: 'player', targetId: Number(playerId),
+    targetLabel: await nomeJogador(playerId),
+    details: { pelada: await dataPelada(matchdayId), ...extra },
+  });
+}
+
+module.exports = { logAudit, logAuditAta, nomeJogador, dataPelada };

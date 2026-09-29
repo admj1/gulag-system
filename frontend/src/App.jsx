@@ -19,7 +19,6 @@ import AdminMatchdayDetailPage from './pages/admin/AdminMatchdayDetailPage';
 import AdminLiveSummaryPage from './pages/admin/AdminLiveSummaryPage';
 import AdminFinancePage from './pages/admin/AdminFinancePage';
 import AdminSettingsPage from './pages/admin/AdminSettingsPage';
-import AdminWhatsappPage from './pages/admin/AdminWhatsappPage';
 import AdminAuditPage from './pages/admin/AdminAuditPage';
 import AdminArtPage from './pages/admin/AdminArtPage';
 
@@ -50,7 +49,6 @@ export default function App() {
           <Route path="matchdays/:id" element={<AdminMatchdayDetailPage />} />
           <Route path="matchdays/:id/ao-vivo" element={<AdminLiveSummaryPage />} />
           <Route path="finance" element={<AdminFinancePage />} />
-          <Route path="whatsapp" element={<AdminWhatsappPage />} />
           <Route path="auditoria" element={<AdminAuditPage />} />
           <Route path="arte" element={<AdminArtPage />} />
           <Route path="settings" element={<AdminSettingsPage />} />

@@ -17,7 +17,6 @@ const ADMIN_LINKS = [
   { to: '/admin/players', label: 'CADASTRO DE JOGADORES' },
   { to: '/admin/matchdays', label: 'GERENCIAMENTO DE ATAS' },
   { to: '/admin/finance', label: 'CONTROLE FINANCEIRO' },
-  { to: '/admin/whatsapp', label: 'WHATSAPP' },
   { to: '/admin/auditoria', label: 'AUDITORIA' },
   // Em stand by: so o admin ve, enquanto a arte de redes nao e liberada
   { to: '/admin/arte', label: 'ARTE (EM TESTE)' },

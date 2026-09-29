@@ -8,6 +8,26 @@ const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} 
   phone, email, photo_url, position, stars, role, player_type, blocked, block_reason,
   blocked_until, mensalista_number, active, is_owner, login_locked, exempt_monthly, auto_roster`;
 
+// O que mudou num cadastro, para a auditoria: { campo: { de, para } }. A foto
+// entra so como "trocou/removeu" — a URL em si nao diz nada a quem le.
+const CAMPOS_AUDITADOS = {
+  name: 'nome', phone: 'telefone', email: 'e-mail', position: 'posição', stars: 'estrelas',
+  mensalista_number: 'número', exempt_monthly: 'isento de mensalidade', auto_roster: 'goleiro fixo',
+};
+
+function diferencas(antes, depois) {
+  const mudou = {};
+  for (const [campo, rotulo] of Object.entries(CAMPOS_AUDITADOS)) {
+    const de = antes[campo] ?? null;
+    const para = depois[campo] ?? null;
+    if (String(de) !== String(para)) mudou[rotulo] = { de, para };
+  }
+  if ((antes.photo_url ?? null) !== (depois.photo_url ?? null)) {
+    mudou.foto = depois.photo_url ? 'trocou' : 'removeu';
+  }
+  return mudou;
+}
+
 // Mensalistas seguem a propria numeracao; os demais ficam em ordem alfabetica
 const PLAYER_ORDER = `mensalista_number NULLS LAST, ${displayNameSql()}`;
 
@@ -94,7 +114,7 @@ async function updateMe(req, res, next) {
     const { first_name, last_name, nickname, phone, email, photo_url, position } = req.body;
 
     const { rows: before } = await pool.query(
-      `SELECT photo_url, ${displayNameSql()} AS name FROM players WHERE id = $1`, [req.user.id]
+      `SELECT ${PLAYER_FIELDS} FROM players WHERE id = $1`, [req.user.id]
     );
     if (!before[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
 
@@ -113,19 +133,13 @@ async function updateMe(req, res, next) {
     );
     const after = rows[0];
 
-    // So registra quando nome (nome+sobrenome+apelido, o que aparece nas
-    // listas) ou foto realmente mudaram — editar telefone/posicao nao e o
-    // que foi pedido para auditar aqui
-    const nameChanged = after.name !== before[0].name;
-    const photoChanged = photo_url !== undefined && photo_url !== before[0].photo_url;
-    if (nameChanged || photoChanged) {
+    // Registra tudo que realmente mudou (nome, telefone, e-mail, foto...)
+    const mudou = diferencas(before[0], after);
+    if (Object.keys(mudou).length > 0) {
       await logAudit({
         actorId: req.user.id, actorName: after.name,
         action: 'player.self_update', targetType: 'player', targetId: req.user.id, targetLabel: after.name,
-        details: {
-          ...(nameChanged ? { nome_antes: before[0].name, nome_depois: after.name } : {}),
-          ...(photoChanged ? { foto: true } : {}),
-        },
+        details: mudou,
       });
     }
 
@@ -187,6 +201,10 @@ async function unlockLogin(req, res, next) {
       [req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: 'player.unlock_login', targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
+    });
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -220,6 +238,11 @@ async function create(req, res, next) {
       [first_name, last_name, nickname || null, phone || null, email || null, passwordHash,
        position || null, stars, player_type, number]
     );
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: 'player.create', targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
+      details: { tipo: rows[0].player_type },
+    });
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === '23505') {
@@ -262,6 +285,10 @@ async function update(req, res, next) {
 
     const passwordHash = password ? await bcrypt.hash(password, 10) : null;
 
+    const { rows: antes } = await pool.query(
+      `SELECT ${PLAYER_FIELDS} FROM players WHERE id = $1`, [req.params.id]
+    );
+
     const { rows } = await pool.query(
       `UPDATE players SET
          first_name = COALESCE($1, first_name),
@@ -293,8 +320,17 @@ async function update(req, res, next) {
     );
     if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
 
-    // So audita quando o admin de fato trocou a senha de outra pessoa — o
-    // resto do formulario (nome, telefone, estrelas...) nao e sensivel assim
+    // Tudo que o admin mudou no cadastro (a senha fica num registro proprio
+    // logo abaixo, sem mostrar valor nenhum, claro)
+    const mudou = diferencas(antes[0] || {}, rows[0]);
+    if (Object.keys(mudou).length > 0) {
+      await logAudit({
+        actorId: req.user.id, actorName: req.user.name,
+        action: 'player.update', targetType: 'player', targetId: rows[0].id,
+        targetLabel: rows[0].name, details: mudou,
+      });
+    }
+
     if (passwordHash) {
       await logAudit({
         actorId: req.user.id, actorName: req.user.name,
@@ -370,6 +406,10 @@ async function changeStatus(req, res, next) {
 
     await client.query('BEGIN');
 
+    const { rows: tipoAntes } = await client.query(
+      'SELECT player_type FROM players WHERE id = $1', [req.params.id]
+    );
+
     await client.query(
       `UPDATE player_status_history SET end_date = $1
        WHERE player_id = $2 AND end_date IS NULL`,
@@ -403,6 +443,11 @@ async function changeStatus(req, res, next) {
     }
 
     await client.query('COMMIT');
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: 'player.change_type', targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
+      details: { de: tipoAntes[0]?.player_type, para: player_type, a_partir_de: date },
+    });
     res.json(rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -427,6 +472,11 @@ async function setActive(req, res, next) {
     if (!rows[0]) {
       return res.status(404).json({ error: 'Jogador não encontrado ou é o dono do sistema' });
     }
+    await logAudit({
+      actorId: req.user.id, actorName: req.user.name,
+      action: active ? 'player.activate' : 'player.deactivate',
+      targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
+    });
     res.json(rows[0]);
   } catch (err) {
     next(err);
