@@ -8,6 +8,12 @@ const { confirmationBlock } = require('../services/debts');
 const { logAudit } = require('../services/audit');
 const { listActivePlayers } = require('./playersController');
 
+// Prazo da lista: vespera da pelada, 17:00 no horario de Brasilia ($2 = data
+// da pelada). Antes o prazo era a propria hora da pelada gravada em UTC —
+// saia "sabado 04:00" no convite, e o fechamento automatico nunca pegava a
+// lista na sexta, porque o prazo ainda nao tinha vencido.
+const PRAZO_DA_LISTA_SQL = `((($2)::date - 1) + TIME '17:00') AT TIME ZONE 'America/Sao_Paulo'`;
+
 
 async function create(req, res, next) {
   try {
@@ -83,9 +89,9 @@ async function createFromRoster(req, res, next) {
 
     const { rows: matchdayRows } = await client.query(
       `INSERT INTO matchdays (season_id, match_date, confirmation_deadline, status)
-       VALUES ($1, $2, ($2::date + $3::time), $4)
+       VALUES ($1, $2, ${PRAZO_DA_LISTA_SQL}, $3)
        RETURNING *`,
-      [seasonId, match_date, settings.match_time, confirm_all ? 'closed' : 'open']
+      [seasonId, match_date, confirm_all ? 'closed' : 'open']
     );
     const matchday = matchdayRows[0];
 
@@ -181,9 +187,9 @@ async function createRetroactive(req, res, next) {
 
     const { rows: matchdayRows } = await client.query(
       `INSERT INTO matchdays (season_id, match_date, confirmation_deadline, status)
-       VALUES ($1, $2, ($2::date + $3::time), 'closed')
+       VALUES ($1, $2, ${PRAZO_DA_LISTA_SQL}, 'closed')
        RETURNING *`,
-      [seasonId, match_date, settings.match_time]
+      [seasonId, match_date]
     );
     const matchday = matchdayRows[0];
 
