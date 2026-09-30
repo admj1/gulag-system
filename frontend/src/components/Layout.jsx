@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/client';
 import { confirmLeave } from './unsavedGuard';
 import { Avatar } from './ui';
 
@@ -32,6 +33,29 @@ export default function Layout() {
 
   // Ao navegar, fecha a gaveta (no celular ela cobre a tela)
   useEffect(() => setOpen(false), [location.pathname]);
+
+  // Quantos pedidos de cadastro esperam aprovacao: aparece ao lado da aba
+  // para o admin saber quando precisa entrar nela. Atualiza ao navegar, ao
+  // voltar para a janela e quando a propria tela de aprovacoes avisa que
+  // aprovou/recusou alguem.
+  const [pendentes, setPendentes] = useState(0);
+  useEffect(() => {
+    if (!isAdmin) return undefined;
+    const carregar = () => api.get('/registration-requests')
+      .then(({ data }) => setPendentes(data.length))
+      .catch(() => {});
+    carregar();
+    window.addEventListener('focus', carregar);
+    window.addEventListener('pedidos-cadastro-mudaram', carregar);
+    return () => {
+      window.removeEventListener('focus', carregar);
+      window.removeEventListener('pedidos-cadastro-mudaram', carregar);
+    };
+  }, [isAdmin, location.pathname]);
+
+  const adminLinks = ADMIN_LINKS.map((l) => (
+    l.to === '/admin/approvals' && pendentes > 0 ? { ...l, badge: pendentes } : l
+  ));
 
   // Trava a rolagem do fundo enquanto a gaveta estiver aberta no celular
   useEffect(() => {
@@ -98,8 +122,12 @@ export default function Layout() {
               >
                 <span aria-hidden="true" className="text-xs">{adminOpen ? '▾' : '▸'}</span>
                 Administração
+                {/* Com o grupo fechado a aba nao aparece: o aviso sobe para ca */}
+                {!adminOpen && pendentes > 0 && (
+                  <span className="text-amber-400 normal-case">({pendentes} pendente{pendentes > 1 ? 's' : ''})</span>
+                )}
               </button>
-              {adminOpen && <SidebarGroup links={ADMIN_LINKS} />}
+              {adminOpen && <SidebarGroup links={adminLinks} />}
             </div>
           )}
         </div>
@@ -125,7 +153,7 @@ export default function Layout() {
 function SidebarGroup({ links }) {
   return (
     <ul className="flex flex-col">
-      {links.map(({ to, label, end }) => (
+      {links.map(({ to, label, end, badge }) => (
         <li key={to}>
           <NavLink
             to={to}
@@ -141,6 +169,7 @@ function SidebarGroup({ links }) {
             }
           >
             {label}
+            {badge > 0 && <span className="text-amber-400 font-semibold"> ({badge})</span>}
           </NavLink>
         </li>
       ))}

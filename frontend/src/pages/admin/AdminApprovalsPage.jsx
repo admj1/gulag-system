@@ -29,6 +29,7 @@ export default function AdminApprovalsPage() {
   async function approve(request) {
     try {
       await api.post(`/registration-requests/${request.id}/approve`);
+      window.dispatchEvent(new Event('pedidos-cadastro-mudaram')); // atualiza o numero no menu
       toast.success(`${request.first_name} foi aprovado e já pode entrar`);
       load();
     } catch (err) {
@@ -39,6 +40,7 @@ export default function AdminApprovalsPage() {
   async function reject(request, reason) {
     try {
       await api.post(`/registration-requests/${request.id}/reject`, { reason });
+      window.dispatchEvent(new Event('pedidos-cadastro-mudaram'));
       toast.success('Solicitação recusada');
       setRejecting(null);
       load();
