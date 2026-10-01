@@ -16,6 +16,7 @@ const ACTIONS = {
   'ata.invite': { texto: 'incluiu {alvo} na pelada de {pelada}' },
   'ata.remove': { texto: 'tirou {alvo} da lista da pelada de {pelada}' },
   'ata.admin_status': { texto: 'marcou {alvo} como {status} na pelada de {pelada}' },
+  'ata.roster_add': { texto: 'colocou {alvo} na lista da pelada de {pelada} (entrou no elenco fixo com a lista já aberta)' },
 
   // Pelada, times e sumula
   'matchday.create': { texto: 'lançou a pelada de {alvo}' },

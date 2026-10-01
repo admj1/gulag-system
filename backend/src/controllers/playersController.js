@@ -3,6 +3,7 @@ const pool = require('../config/db');
 const { displayNameSql } = require('../config/settings');
 const { logAudit } = require('../services/audit');
 const { limpaTelefone } = require('../utils/text');
+const { incluiNasAtasAbertas } = require('../services/roster');
 
 const PLAYER_FIELDS = `id, first_name, last_name, nickname, ${displayNameSql()} AS name,
   phone, email, photo_url, position, stars, role, player_type, blocked, block_reason,
@@ -243,6 +244,7 @@ async function create(req, res, next) {
       action: 'player.create', targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
       details: { tipo: rows[0].player_type },
     });
+    await incluiNasAtasAbertas(rows[0].id, { req });
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === '23505') {
@@ -331,6 +333,8 @@ async function update(req, res, next) {
       });
     }
 
+    if (auto_roster) await incluiNasAtasAbertas(rows[0].id, { req });
+
     if (passwordHash) {
       await logAudit({
         actorId: req.user.id, actorName: req.user.name,
@@ -376,6 +380,7 @@ async function setBlock(req, res, next) {
       targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
       details: blocked ? { motivo: block_reason || null, ate: until ? until.toISOString() : null } : null,
     });
+    if (!blocked) await incluiNasAtasAbertas(rows[0].id, { req });
 
     res.json(rows[0]);
   } catch (err) {
@@ -448,6 +453,7 @@ async function changeStatus(req, res, next) {
       action: 'player.change_type', targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
       details: { de: tipoAntes[0]?.player_type, para: player_type, a_partir_de: date },
     });
+    await incluiNasAtasAbertas(rows[0].id, { req });
     res.json(rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -477,6 +483,7 @@ async function setActive(req, res, next) {
       action: active ? 'player.activate' : 'player.deactivate',
       targetType: 'player', targetId: rows[0].id, targetLabel: rows[0].name,
     });
+    if (active) await incluiNasAtasAbertas(rows[0].id, { req });
     res.json(rows[0]);
   } catch (err) {
     next(err);

@@ -56,14 +56,8 @@ async function resolveSeason(client, matchDate) {
   return rows[0].id;
 }
 
-// Quem entra na ata sozinho: todo mensalista e o goleiro marcado como fixo.
-// Goleiro nao marcado coloca o nome como avulso, igual a um diarista.
-const ROSTER_SQL = `
-  active AND NOT blocked AND (
-    player_type = 'mensalista'
-    OR (player_type = 'goleiro' AND auto_roster)
-  )
-`;
+// Quem entra na ata sozinho (elenco fixo): ver services/roster.js
+const { ROSTER_SQL } = require('../services/roster');
 
 // Admin: previa do elenco padrao da ata (mensalistas numerados + goleiros fixos)
 async function rosterPreview(req, res, next) {

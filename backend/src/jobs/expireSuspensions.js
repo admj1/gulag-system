@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const pool = require('../config/db');
 const { displayNameSql } = require('../config/settings');
 const { logAudit } = require('../services/audit');
+const { incluiNasAtasAbertas } = require('../services/roster');
 
 // De hora em hora, libera sozinho quem foi suspenso com prazo e o prazo ja
 // passou. Bloqueio por debito fica de fora dessa checagem: so tem
@@ -23,6 +24,8 @@ function scheduleExpireSuspensions() {
           action: 'player.unblock', targetType: 'player', targetId: player.id,
           targetLabel: player.name, details: { motivo: 'prazo da suspensão expirou' },
         });
+        // Voltou ao elenco: entra na ata da semana se ainda estiver aberta
+        await incluiNasAtasAbertas(player.id);
       }
     } catch (err) {
       console.error('Falha ao expirar suspensões:', err);
