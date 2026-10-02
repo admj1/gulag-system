@@ -195,6 +195,20 @@ export default function AdminMatchdayDetailPage() {
     }
   }
 
+  async function reopenList() {
+    if (!window.confirm(
+      'Reabrir a lista desta pelada? Quem estava confirmado continua; quem ficou de fora pode confirmar de novo.'
+      + ' Depois de reaberta, ela só fecha quando você clicar em "Fechar lista".'
+    )) return;
+    try {
+      await api.post(`/matchdays/${id}/reopen`);
+      toast.success('Lista reaberta');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao reabrir a lista');
+    }
+  }
+
   async function drawTeams() {
     try {
       await api.post(`/matchdays/${id}/draw-teams`, { numberOfTeams: Number(numberOfTeams) });
@@ -376,6 +390,9 @@ export default function AdminMatchdayDetailPage() {
                 </Button>
                 <Button variant="secondary" onClick={closeList}>Fechar lista</Button>
               </>
+            )}
+            {matchday.status === 'closed' && (
+              <Button variant="secondary" onClick={reopenList}>↺ Reabrir lista</Button>
             )}
             {teams.length > 0 && (
               <Link

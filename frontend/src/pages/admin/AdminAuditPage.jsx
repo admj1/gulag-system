@@ -23,6 +23,7 @@ const ACTIONS = {
   'matchday.create_retroactive': { texto: 'lançou a ata retroativa de {alvo}' },
   'matchday.notify': { texto: 'enviou o aviso da pelada de {alvo}' },
   'matchday.close': { texto: 'fechou a lista da pelada de {alvo}' },
+  'matchday.reopen': { texto: 'reabriu a lista da pelada de {alvo}' },
   'matchday.draw_teams': { texto: 'sorteou os times da pelada de {alvo}' },
   'matchday.rename_team': { texto: 'renomeou um time da pelada de {alvo}' },
   'matchday.move_player': { texto: 'mudou {alvo} de time na pelada de {pelada}' },

@@ -667,6 +667,32 @@ async function closeList(req, res, next) {
   }
 }
 
+// Admin: reabre a lista de uma pelada fechada (ainda nao realizada). Quem
+// estava confirmado, na espera ou marcado "nao vai" continua assim — quem
+// ficou de fora pode confirmar de novo. Ata reaberta nao fecha mais
+// sozinha: so o admin fecha (auto_close desligado), senao o fechamento
+// automatico poderia fecha-la de novo na hora seguinte.
+async function reopenList(req, res, next) {
+  try {
+    const { rows: atual } = await pool.query('SELECT status FROM matchdays WHERE id = $1', [req.params.id]);
+    if (!atual[0]) return res.status(404).json({ error: 'Pelada não encontrada' });
+    if (atual[0].status === 'open') return res.status(409).json({ error: 'A lista já está aberta' });
+    if (atual[0].status === 'played') {
+      return res.status(409).json({ error: 'Esta pelada já foi realizada (a súmula foi salva) — não dá para reabrir a lista' });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE matchdays SET status = 'open', auto_close = FALSE WHERE id = $1 AND status = 'closed' RETURNING *`,
+      [req.params.id]
+    );
+    if (!rows[0]) return res.status(409).json({ error: 'Não foi possível reabrir a lista' });
+    await auditaPelada(req, 'matchday.reopen', req.params.id);
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Admin: sorteia times equilibrados por soma de estrelas (goleiros ficam de fora)
 async function drawTeams(req, res, next) {
   try {
@@ -1265,7 +1291,7 @@ async function submitSummary(req, res, next) {
 }
 
 module.exports = {
-  create, list, getById, getConfirmations, confirm, closeList, closeMatchday,
+  create, list, getById, getConfirmations, confirm, closeList, reopenList, closeMatchday,
   drawTeams, submitSummary, getSummary, getTeams, moveTeamPlayer, rosterPreview, createFromRoster, remove,
   setConfirmation, removeConfirmation, invitePlayer, cancelOwnConfirmation,
   declineOwn, createRetroactive, getLive, pushEvents, notifyMatchday, renameTeam,

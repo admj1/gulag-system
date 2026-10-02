@@ -137,7 +137,7 @@ const DEFAULT_INVITE_HTML = `<table role="presentation" width="100%" cellpadding
               Saiu a lista da pelada de <strong style="color:#ffffff">{{data}}, às {{horario}}</strong>. {{como_entra}}
             </p>
             <p style="margin:0 0 24px;color:#9ca3af;font-size:14px">
-              A lista fecha em <strong style="color:#e5e7eb">{{prazo}}</strong>. Quem confirmar e faltar entra na multa.
+              A lista fecha em <strong style="color:#e5e7eb">{{prazo}}</strong> se já tiver 20 na linha e goleiro confirmados — se não, continua aberta. Quem confirmar e faltar entra na multa.
             </p>
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px">
               <tr>
@@ -206,7 +206,7 @@ function inviteTemplate({
     `Fala, ${name}!`,
     '',
     `Saiu a lista da pelada de ${quando}. ${comoEntra}`,
-    deadlineLabel ? `A lista fecha em ${deadlineLabel}.` : null,
+    deadlineLabel ? `A lista fecha em ${deadlineLabel} se já tiver 20 na linha e goleiro confirmados.` : null,
     '',
     `Confirmar presença: ${url}`,
   ].filter((line) => line !== null).join('\n');
