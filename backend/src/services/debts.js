@@ -78,7 +78,8 @@ async function openDebtsFor(playerId) {
 // porque o mes corrente entra em aberto para todo mundo assim que vira.
 const MAX_MENSALIDADES_ABERTAS = 1;
 
-function blockingReason({ months, charges }) {
+// Resumo do que impede ("1 diária(s), 2 mensalidades"), ou null se liberado
+function resumoPendencias({ months, charges }) {
   const diarias = charges.filter((c) => c.type === 'diaria').length;
   const multas = charges.filter((c) => c.type === 'multa').length;
   const mensalidades = months.length;
@@ -87,16 +88,26 @@ function blockingReason({ months, charges }) {
   if (diarias) pendencias.push(`${diarias} diária(s)`);
   if (multas) pendencias.push(`${multas} multa(s)`);
   if (mensalidades > MAX_MENSALIDADES_ABERTAS) pendencias.push(`${mensalidades} mensalidades`);
+  return pendencias.length ? pendencias.join(', ') : null;
+}
 
-  if (pendencias.length === 0) return null;
-  return `Pendência no financeiro: ${pendencias.join(', ')}.`
+// Mensagem para o proprio devedor, quando ele tenta confirmar
+function blockingReason(debts) {
+  const resumo = resumoPendencias(debts);
+  if (!resumo) return null;
+  return `Pendência no financeiro: ${resumo}.`
     + ' Regularize com o organizador para confirmar presença — a sua situação está na aba Financeiro.';
 }
 
-// Motivo do bloqueio, ou null quando esta liberado
+// Motivo do bloqueio (mensagem para o proprio jogador), ou null quando liberado
 async function confirmationBlock(playerId) {
   const debts = await openDebtsFor(playerId);
   return blockingReason(debts);
 }
 
-module.exports = { monthlyMemberSql, openDebtsFor, confirmationBlock };
+// So o resumo ("1 diária(s)"), para quando quem tenta incluir e outra pessoa
+async function pendenciasDe(playerId) {
+  return resumoPendencias(await openDebtsFor(playerId));
+}
+
+module.exports = { monthlyMemberSql, openDebtsFor, confirmationBlock, pendenciasDe };

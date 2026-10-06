@@ -4,7 +4,7 @@ const { displayNameSql, getSettings } = require('../config/settings');
 const {
   sendMatchdayInvites, inviteRecipients, appBaseUrl, MAIL_CONFIGURED,
 } = require('../services/mailer');
-const { confirmationBlock } = require('../services/debts');
+const { confirmationBlock, pendenciasDe } = require('../services/debts');
 const { logAudit, logAuditAta, dataPelada } = require('../services/audit');
 const { listActivePlayers } = require('./playersController');
 
@@ -352,6 +352,31 @@ async function cancelOwnConfirmation(req, res, next) {
   }
 }
 
+// Cadastro ja existente com o mesmo nome do que foi digitado e que esta
+// devendo. Com sobrenome digitado compara nome completo; so com o primeiro
+// nome, compara com primeiro nome e apelido. Ignora maiuscula e acento.
+const SEM_ACENTO = (col) => `translate(lower(trim(${col})), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc')`;
+async function devedorComMesmoNome(client, { first_name, last_name, nickname }) {
+  const normaliza = (s) => String(s || '').trim().replace(/\s+/g, ' ');
+  const primeiro = normaliza(first_name);
+  const sobrenome = normaliza(last_name);
+  const apelido = normaliza(nickname);
+  const { rows } = await client.query(
+    `SELECT id, ${displayNameSql()} AS nome FROM players
+     WHERE CASE WHEN $2 <> ''
+       THEN ${SEM_ACENTO("first_name || ' ' || last_name")} = ${SEM_ACENTO("$1 || ' ' || $2")}
+       ELSE ${SEM_ACENTO('first_name')} = ${SEM_ACENTO('$1')} OR ${SEM_ACENTO('nickname')} = ${SEM_ACENTO('$1')}
+     END
+     OR ($3 <> '' AND ${SEM_ACENTO('nickname')} = ${SEM_ACENTO('$3')})`,
+    [primeiro, sobrenome, apelido]
+  );
+  for (const p of rows) {
+    const pendencias = await pendenciasDe(p.id);
+    if (pendencias) return { nome: p.nome, pendencias };
+  }
+  return null;
+}
+
 // Qualquer jogador logado pode incluir alguem na lista (diarista ou goleiro convidado).
 // Aceita um jogador ja cadastrado ou um nome novo, que entra como diarista.
 async function invitePlayer(req, res, next) {
@@ -373,6 +398,18 @@ async function invitePlayer(req, res, next) {
       if (!first_name) {
         return res.status(400).json({ error: 'Informe o nome de quem você quer incluir' });
       }
+      // Digitar o nome em vez de escolher da lista criaria um cadastro novo,
+      // sem divida nenhuma — um jeito de furar a trava abaixo. Se ja existe
+      // alguem com esse nome devendo, so o admin inclui.
+      if (req.user.role !== 'admin') {
+        const homonimo = await devedorComMesmoNome(client, { first_name, last_name, nickname });
+        if (homonimo) {
+          return res.status(403).json({
+            error: `Já existe o cadastro de ${homonimo.nome} com pendência no financeiro (${homonimo.pendencias}).`
+              + ' Só um administrador pode incluí-lo na lista.',
+          });
+        }
+      }
     } else {
       const { rows } = await client.query(
         'SELECT player_type, blocked, block_reason, active FROM players WHERE id = $1', [player_id]
@@ -386,11 +423,17 @@ async function invitePlayer(req, res, next) {
         return res.status(409).json({ error: 'Mensalistas já entram na lista e confirmam sozinhos' });
       }
 
-      // Nao adianta um terceiro incluir quem esta devendo
+      // Quem esta devendo so entra pela mao de um admin
       if (req.user.role !== 'admin') {
-        const pendencia = await confirmationBlock(player_id);
-        if (pendencia) {
-          return res.status(403).json({ error: `Não dá para incluir: ${pendencia}` });
+        const pendencias = await pendenciasDe(player_id);
+        if (pendencias) {
+          const { rows: quem } = await client.query(
+            `SELECT ${displayNameSql()} AS nome FROM players WHERE id = $1`, [player_id]
+          );
+          return res.status(403).json({
+            error: `${quem[0]?.nome || 'Esse jogador'} tem pendência no financeiro (${pendencias}).`
+              + ' Só um administrador pode incluí-lo na lista.',
+          });
         }
       }
     }
