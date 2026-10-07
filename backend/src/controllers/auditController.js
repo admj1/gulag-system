@@ -6,6 +6,7 @@ const CATEGORIAS = {
   pelada: ['matchday.%'],
   cadastro: ['player.%', 'registration.%'],
   financeiro: ['finance.%'],
+  torneio: ['tournament.%'],
   sistema: ['season.%', 'settings.%'],
 };
 

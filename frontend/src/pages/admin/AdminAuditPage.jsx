@@ -57,6 +57,24 @@ const ACTIONS = {
   'finance.month_all': { texto: 'acertou a mensalidade de {alvo} para todo mundo' },
   'finance.pay_all_pending': { texto: 'deu baixa em todas as diárias e multas em aberto' },
 
+  // Torneios
+  'tournament.create': { texto: 'criou o torneio {alvo}' },
+  'tournament.update': { texto: 'editou o torneio {alvo}' },
+  'tournament.delete': { texto: 'excluiu o torneio {alvo}' },
+  'tournament.register': { texto: 'inscreveu {jogador} no torneio {alvo}' },
+  'tournament.unregister': { texto: 'tirou {jogador} do torneio {alvo}' },
+  'tournament.start_draft': { texto: 'encerrou as inscrições do torneio {alvo}' },
+  'tournament.captains': { texto: 'definiu os capitães do torneio {alvo}' },
+  'tournament.draft_order': { texto: 'definiu a ordem do draft do torneio {alvo}' },
+  'tournament.pick': { texto: 'registrou uma escolha do draft no torneio {alvo}' },
+  'tournament.undo_pick': { texto: 'desfez uma escolha do draft no torneio {alvo}' },
+  'tournament.finish_draft': { texto: 'fechou o draft e gerou a tabela do torneio {alvo}' },
+  'tournament.finish_match': { texto: 'encerrou uma partida do torneio {alvo}' },
+  'tournament.reopen_match': { texto: 'reabriu uma partida do torneio {alvo}' },
+  'tournament.fee_paid': { texto: 'deu baixa na taxa de {jogador} no torneio {alvo}' },
+  'tournament.fee_pending': { texto: 'reabriu a taxa de {jogador} no torneio {alvo}' },
+  'tournament.awards': { texto: 'definiu a premiação do torneio {alvo}' },
+
   // Sistema
   'season.create': { texto: 'criou a temporada {alvo}' },
   'season.update': { texto: 'editou a temporada {alvo}' },
@@ -71,6 +89,7 @@ const CATEGORIAS = [
   { value: 'pelada', label: 'Peladas, times e súmula' },
   { value: 'cadastro', label: 'Cadastros e senhas' },
   { value: 'financeiro', label: 'Financeiro' },
+  { value: 'torneio', label: 'Torneios' },
   { value: 'sistema', label: 'Temporadas e configurações' },
 ];
 
@@ -232,7 +251,8 @@ function renderAction(entry) {
   }
   texto = texto
     .replace('{pelada}', formatDia(entry.details?.pelada) || '?')
-    .replace('{status}', STATUS[entry.details?.status] || entry.details?.status || '?');
+    .replace('{status}', STATUS[entry.details?.status] || entry.details?.status || '?')
+    .replace('{jogador}', entry.details?.jogador || '?');
   if (!texto.includes('{alvo}')) return texto;
 
   const alvoTexto = entry.target_type === 'matchday'
