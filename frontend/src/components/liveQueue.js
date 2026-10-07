@@ -39,7 +39,9 @@ export function newClientId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-export function useLiveQueue(matchdayId, onSynced) {
+// matchdayId e a chave da fila no aparelho; endpoint e para onde ela sobe
+// (padrao: sumula ao vivo da pelada; o torneio passa o seu)
+export function useLiveQueue(matchdayId, onSynced, endpoint = `/matchdays/${matchdayId}/events`) {
   const [pending, setPending] = useState(() => readQueue(matchdayId));
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -65,7 +67,7 @@ export function useLiveQueue(matchdayId, onSynced) {
     sendingRef.current = true;
     setSending(true);
     try {
-      const { data } = await api.post(`/matchdays/${matchdayId}/events`, { events: batch });
+      const { data } = await api.post(endpoint, { events: batch });
       // Toques feitos durante o envio continuam na fila
       const sent = new Set(batch.map((e) => e.client_id));
       setQueue(pendingRef.current.filter((e) => !sent.has(e.client_id)));
@@ -85,7 +87,7 @@ export function useLiveQueue(matchdayId, onSynced) {
       sendingRef.current = false;
       setSending(false);
     }
-  }, [matchdayId, setQueue]);
+  }, [endpoint, setQueue]);
 
   const push = useCallback((event) => {
     setQueue([...pendingRef.current, event]);

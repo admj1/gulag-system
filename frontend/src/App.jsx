@@ -11,6 +11,9 @@ import PlayerProfilePage from './pages/PlayerProfilePage';
 import MyProfilePage from './pages/MyProfilePage';
 import MyFinancePage from './pages/MyFinancePage';
 import RankingsPage from './pages/RankingsPage';
+import TournamentsPage from './pages/TournamentsPage';
+import TournamentPage from './pages/TournamentPage';
+import TournamentMatchPage from './pages/TournamentMatchPage';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminApprovalsPage from './pages/admin/AdminApprovalsPage';
 import AdminPlayersPage from './pages/admin/AdminPlayersPage';
@@ -37,6 +40,9 @@ export default function App() {
         <Route path="/perfil" element={<MyProfilePage />} />
         <Route path="/financeiro" element={<MyFinancePage />} />
         <Route path="/rankings" element={<RankingsPage />} />
+        <Route path="/torneios" element={<TournamentsPage />} />
+        <Route path="/torneios/partidas/:matchId" element={<TournamentMatchPage />} />
+        <Route path="/torneios/:id" element={<TournamentPage />} />
 
         <Route
           path="/admin"

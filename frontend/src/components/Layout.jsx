@@ -8,6 +8,7 @@ import { Avatar } from './ui';
 const LINKS = [
   { to: '/', label: 'PELADAS', end: true },
   { to: '/rankings', label: 'RANKINGS' },
+  { to: '/torneios', label: 'TORNEIOS' },
   { to: '/players', label: 'JOGADORES' },
   { to: '/financeiro', label: 'FINANCEIRO' },
   { to: '/perfil', label: 'MEU PERFIL' },

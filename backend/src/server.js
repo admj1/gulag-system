@@ -17,6 +17,7 @@ const seasonsRoutes = require('./routes/seasons');
 const settingsRoutes = require('./routes/settings');
 const auditRoutes = require('./routes/audit');
 const registrationRequestsRoutes = require('./routes/registrationRequests');
+const tournamentsRoutes = require('./routes/tournaments');
 const { scheduleWeeklyClose } = require('./jobs/closeWeeklyList');
 const { scheduleWeeklyBackup } = require('./jobs/weeklyBackup');
 const { scheduleExpireSuspensions } = require('./jobs/expireSuspensions');
@@ -105,6 +106,7 @@ app.use('/api/seasons', seasonsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/audit-log', auditRoutes);
 app.use('/api/registration-requests', registrationRequestsRoutes);
+app.use('/api/tournaments', tournamentsRoutes);
 
 const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');
 if (fs.existsSync(frontendDist)) {
