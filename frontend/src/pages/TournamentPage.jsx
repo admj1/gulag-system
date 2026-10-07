@@ -498,7 +498,7 @@ function Times({ d, isAdmin }) {
   );
 }
 
-function Ranking({ titulo, itens, valor, rotulo }) {
+function Ranking({ titulo, itens, valor }) {
   const lista = itens.filter((x) => valor(x) > 0).sort((a, b) => valor(b) - valor(a)).slice(0, 5);
   return (
     <div>
@@ -508,7 +508,7 @@ function Ranking({ titulo, itens, valor, rotulo }) {
           {lista.map((x, i) => (
             <li key={`${x.player_id}-${x.team_id}`} className="flex justify-between gap-2">
               <span className="text-gray-200 truncate">{i + 1}. {x.name} <span className="text-xs text-gray-500">{x.team_name}</span></span>
-              <span className="font-bold text-gray-100">{valor(x)}{rotulo}</span>
+              <span className="font-bold text-gray-100">{valor(x)}</span>
             </li>
           ))}
         </ol>
@@ -523,9 +523,9 @@ function Estatisticas({ d }) {
     <Card title="Estatísticas do torneio">
       <p className="text-xs text-gray-500 mb-3">Só deste torneio — não entram nas estatísticas da pelada.</p>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Ranking titulo="Artilharia" itens={d.stats} valor={(x) => x.goals} rotulo=" gols" />
-        <Ranking titulo="Assistências" itens={d.stats} valor={(x) => x.assists} rotulo="" />
-        <Ranking titulo="Cartões (amarelo + azul + vermelho)" itens={d.stats} valor={(x) => x.yellow_cards + x.blue_cards + x.red_cards} rotulo="" />
+        <Ranking titulo="Artilharia" itens={d.stats} valor={(x) => x.goals} />
+        <Ranking titulo="Assistências" itens={d.stats} valor={(x) => x.assists} />
+        <Ranking titulo="Cartões (amarelo + azul + vermelho)" itens={d.stats} valor={(x) => x.yellow_cards + x.blue_cards + x.red_cards} />
         <div>
           <p className="text-xs text-gray-400 mb-1">Goleiros (menos gols sofridos por jogo)</p>
           {goleiros.length === 0 ? <p className="text-xs text-gray-600">—</p> : (
@@ -597,13 +597,13 @@ function Premiacao({ d, isAdmin, acao }) {
   const premio = (rotulo, valor) => (
     <div className="rounded border border-gulag-border bg-gulag-surface-2 p-3">
       <p className="text-xs text-gray-400">{rotulo}</p>
-      <p className="text-lg font-bold text-gray-100">{valor || '—'}</p>
+      <p className="text-base sm:text-lg font-bold text-gray-100 break-words">{valor || '—'}</p>
     </div>
   );
 
   return (
     <Card title="🏆 Premiação">
-      <div className="grid gap-2 sm:grid-cols-3 mb-3">
+      <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 mb-3">
         {premio('Campeão', nomeTime(t.champion_team_id))}
         {premio('Vice', nomeTime(t.runner_up_team_id))}
         {premio('Artilheiro', artilheiro?.goals ? `${artilheiro.name} (${artilheiro.goals})` : null)}

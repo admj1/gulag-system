@@ -33,7 +33,13 @@ export default function TournamentMatchPage() {
   useEffect(() => { load(); }, [load]);
 
   const onSynced = useCallback((data) => {
-    setD((atual) => (atual ? { ...atual, stats: data.stats } : atual));
+    // O servidor marca a partida como em andamento no primeiro toque
+    setD((atual) => (atual ? {
+      ...atual,
+      stats: data.stats,
+      match: atual.match.status === 'pendente' && data.applied > 0
+        ? { ...atual.match, status: 'em_andamento' } : atual.match,
+    } : atual));
   }, []);
   const { pending, offline, push, flush } = useLiveQueue(
     `torneio-${matchId}`, onSynced, `/tournaments/matches/${matchId}/events`
