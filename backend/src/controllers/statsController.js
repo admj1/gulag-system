@@ -96,8 +96,9 @@ async function playerProfile(req, res, next) {
   }
 }
 
-// Melhor time do dia: mais vitorias e, no empate, menos derrotas.
-// Dias com empate total na lideranca nao contam para ninguem.
+// Melhor time do dia: mais vitorias; no empate, menos derrotas; persistindo,
+// mais empates (jogou mais partidas). Dias ainda empatados na lideranca nao
+// contam para ninguem.
 const BEST_TEAM_SQL = `
   WITH jogados AS (
     SELECT * FROM teams WHERE wins + draws + losses > 0
@@ -112,9 +113,16 @@ const BEST_TEAM_SQL = `
   menos_derrotas AS (
     SELECT matchday_id, MIN(losses) AS l FROM candidatos GROUP BY matchday_id
   ),
-  campeoes AS (
+  menos_perdeu AS (
     SELECT c.* FROM candidatos c
     JOIN menos_derrotas md ON md.matchday_id = c.matchday_id AND c.losses = md.l
+  ),
+  mais_empates AS (
+    SELECT matchday_id, MAX(draws) AS d FROM menos_perdeu GROUP BY matchday_id
+  ),
+  campeoes AS (
+    SELECT m.* FROM menos_perdeu m
+    JOIN mais_empates me ON me.matchday_id = m.matchday_id AND m.draws = me.d
   )
   SELECT * FROM campeoes camp
   WHERE (SELECT COUNT(*) FROM campeoes c2 WHERE c2.matchday_id = camp.matchday_id) = 1
@@ -212,7 +220,8 @@ async function collectiveTotals(playerId) {
 // Nos dias em lados opostos nao da para dizer quem ganhou o confronto direto: a ata
 // guarda quantas vitorias cada time fez no dia inteiro, nao partida a partida. Por
 // isso comparamos como cada time TERMINOU o dia (mais vitorias, desempate por menos
-// derrotas, a mesma regra do melhor time do dia) e contamos os dias de cada um.
+// derrotas, mais empates; a mesma regra do melhor time do dia) e contamos os dias
+// de cada um.
 async function headToHead(a, b) {
   const { rows } = await pool.query(
     `WITH lado_a AS (
@@ -226,7 +235,7 @@ async function headToHead(a, b) {
      ), dias AS (
        SELECT a.team_id = b.team_id AS mesmo_time,
               a.wins AS a_wins, a.draws AS a_draws, a.losses AS a_losses,
-              b.wins AS b_wins, b.losses AS b_losses
+              b.wins AS b_wins, b.draws AS b_draws, b.losses AS b_losses
        FROM lado_a a JOIN lado_b b ON b.matchday_id = a.matchday_id
      )
      SELECT
@@ -236,11 +245,13 @@ async function headToHead(a, b) {
        COALESCE(SUM(a_losses) FILTER (WHERE mesmo_time), 0)::int AS juntos_losses,
        COUNT(*) FILTER (WHERE NOT mesmo_time)::int AS peladas_adversarios,
        COUNT(*) FILTER (WHERE NOT mesmo_time
-         AND (a_wins > b_wins OR (a_wins = b_wins AND a_losses < b_losses)))::int AS a_dias_melhores,
+         AND (a_wins > b_wins OR (a_wins = b_wins AND (a_losses < b_losses
+           OR (a_losses = b_losses AND a_draws > b_draws)))))::int AS a_dias_melhores,
        COUNT(*) FILTER (WHERE NOT mesmo_time
-         AND (b_wins > a_wins OR (b_wins = a_wins AND b_losses < a_losses)))::int AS b_dias_melhores,
+         AND (b_wins > a_wins OR (b_wins = a_wins AND (b_losses < a_losses
+           OR (b_losses = a_losses AND b_draws > a_draws)))))::int AS b_dias_melhores,
        COUNT(*) FILTER (WHERE NOT mesmo_time
-         AND a_wins = b_wins AND a_losses = b_losses)::int AS dias_iguais
+         AND a_wins = b_wins AND a_losses = b_losses AND a_draws = b_draws)::int AS dias_iguais
      FROM dias`,
     [a, b]
   );
