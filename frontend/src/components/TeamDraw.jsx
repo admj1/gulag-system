@@ -11,13 +11,17 @@ import {
   useDroppable,
   pointerWithin,
 } from '@dnd-kit/core';
-import { EmptyState } from './ui';
+import { Button, EmptyState } from './ui';
 
 // Arrastar e soltar jogadores entre os times.
-// No celular vale o toque longo: 200ms segurando antes de comecar a arrastar,
-// senao o gesto e tratado como rolagem normal da pagina.
+// Os times ficam travados: so se mexe depois de tocar em "Ajustar equipes".
+// Sem isso, quem abre a tela so para conferir a sumula embaralha os times sem
+// querer ao rolar a pagina no celular.
+// Destravado, no celular vale o toque longo: 200ms segurando antes de comecar
+// a arrastar, senao o gesto e tratado como rolagem normal da pagina.
 export default function TeamDraw({ teams, onMovePlayer, unassigned = [] }) {
   const [dragging, setDragging] = useState(null);
+  const [ajustando, setAjustando] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -50,19 +54,29 @@ export default function TeamDraw({ teams, onMovePlayer, unassigned = [] }) {
       onDragCancel={() => setDragging(null)}
       onDragEnd={handleDragEnd}
     >
-      <p className="text-xs text-gray-500 mb-2">
-        Segure em um nome e arraste para outro time.
-      </p>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <p className="text-xs text-gray-500">
+          {ajustando
+            ? 'Segure em um nome e arraste para outro time.'
+            : 'Times travados. Toque em "Ajustar equipes" para trocar jogadores.'}
+        </p>
+        <Button
+          variant={ajustando ? 'primary' : 'secondary'}
+          onClick={() => { setAjustando((v) => !v); setDragging(null); }}
+        >
+          {ajustando ? 'Concluir ajuste' : 'Ajustar equipes'}
+        </Button>
+      </div>
 
       {unassigned.length > 0 && (
         <div className="mb-3">
-          <TeamColumn team={pool} draggingTeamId={dragging?.teamId} isPool />
+          <TeamColumn team={pool} draggingTeamId={dragging?.teamId} ajustando={ajustando} isPool />
         </div>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         {teams.map((team) => (
-          <TeamColumn key={team.id} team={team} draggingTeamId={dragging?.teamId} />
+          <TeamColumn key={team.id} team={team} draggingTeamId={dragging?.teamId} ajustando={ajustando} />
         ))}
       </div>
 
@@ -77,7 +91,7 @@ export default function TeamDraw({ teams, onMovePlayer, unassigned = [] }) {
   );
 }
 
-function TeamColumn({ team, draggingTeamId, isPool = false }) {
+function TeamColumn({ team, draggingTeamId, ajustando, isPool = false }) {
   const { setNodeRef, isOver } = useDroppable({ id: team.id });
   const isSource = draggingTeamId === team.id;
   const totalStars = team.players.reduce((sum, p) => sum + Number(p.stars), 0);
@@ -107,33 +121,36 @@ function TeamColumn({ team, draggingTeamId, isPool = false }) {
 
       <ul className="flex flex-col gap-1 min-h-[44px]">
         {team.players.map((player) => (
-          <PlayerChip key={player.id} player={player} teamId={team.id} />
+          <PlayerChip key={player.id} player={player} teamId={team.id} ajustando={ajustando} />
         ))}
         {team.players.length === 0 && (
-          <li className="text-xs text-gray-600 py-2 text-center">solte um jogador aqui</li>
+          <li className="text-xs text-gray-600 py-2 text-center">
+            {ajustando ? 'solte um jogador aqui' : 'sem jogadores'}
+          </li>
         )}
       </ul>
     </div>
   );
 }
 
-function PlayerChip({ player, teamId }) {
+function PlayerChip({ player, teamId, ajustando }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `player-${player.id}`,
     data: { playerId: player.id, teamId, name: player.name },
+    disabled: !ajustando,
   });
 
   return (
     <li
       ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      // touch-none impede o navegador de rolar a pagina enquanto arrasta
-      className={`touch-none select-none cursor-grab active:cursor-grabbing bg-gulag-surface-2 border border-gulag-border rounded px-2 py-2 text-sm text-gray-200 flex items-center gap-2 ${
-        isDragging ? 'opacity-30' : ''
-      }`}
+      {...(ajustando ? { ...listeners, ...attributes } : {})}
+      // touch-none impede o navegador de rolar a pagina enquanto arrasta; so
+      // vale no ajuste, senao o dedo em cima do nome travaria a rolagem
+      className={`select-none bg-gulag-surface-2 border border-gulag-border rounded px-2 py-2 text-sm text-gray-200 flex items-center gap-2 ${
+        ajustando ? 'touch-none cursor-grab active:cursor-grabbing' : ''
+      } ${isDragging ? 'opacity-30' : ''}`}
     >
-      <span className="text-gray-600 leading-none">⠿</span>
+      {ajustando && <span className="text-gray-600 leading-none">⠿</span>}
       <span className="truncate">{player.name}</span>
       <span className="ml-auto text-xs text-gray-500 shrink-0">{player.stars}★</span>
     </li>
