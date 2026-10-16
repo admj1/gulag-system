@@ -83,7 +83,7 @@ export default function InvitePlayer({ matchdayId, candidates, onInvited }) {
         </Button>
       </div>
       <p className="text-xs text-gray-500 mt-2">
-        Diaristas entram por ordem de inscrição e ocupam as vagas que sobrarem dos mensalistas.
+        Diaristas entram por ordem de inscrição e completam as vagas até fechar 20 jogadores de linha.
       </p>
     </Card>
   );

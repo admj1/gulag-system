@@ -619,6 +619,14 @@ async function confirm(req, res, next) {
   }
 }
 
+// A pelada fecha com 20 jogadores de linha (4 times de 5). Mensalistas
+// confirmados sempre ficam: 21 confirmados e uma excecao e todos jogam (o
+// sorteio isola o ultimo a confirmar num 5o time, ver drawTeams). Os demais
+// casos completam com diaristas ate chegar a 20, nunca alem. Goleiros nao
+// contam: todos os que confirmaram ficam.
+const VAGAS_LINHA = 20;
+const POR_TIME = 5;
+
 // Confirma mensalistas/goleiros e completa vagas com diaristas por ordem de fila
 async function closeMatchday(matchdayId) {
   const client = await pool.connect();
@@ -658,13 +666,9 @@ async function closeMatchday(matchdayId) {
       [matchdayId]
     );
 
-    // Nao existe numero fixo de vagas: cada mensalista que nao confirmou libera a sua
-    const { rows: totalMensalistas } = await client.query(
-      `SELECT COUNT(*)::int AS total FROM confirmations c JOIN players p ON p.id = c.player_id
-       WHERE c.matchday_id = $1 AND p.player_type = 'mensalista'`,
-      [matchdayId]
-    );
-    const vagas = Math.max(0, totalMensalistas[0].total - mensalistasConfirmados.length);
+    // Diaristas so completam ate 20 na linha: com 20 ou mais mensalistas
+    // confirmados nao sobra vaga
+    const vagas = Math.max(0, VAGAS_LINHA - mensalistasConfirmados.length);
     const { rows: diaristas } = await client.query(
       `SELECT c.id FROM confirmations c JOIN players p ON p.id = c.player_id
        WHERE c.matchday_id = $1 AND p.player_type = 'diarista' AND c.status IN ('confirmed', 'waitlist')
@@ -743,19 +747,30 @@ async function drawTeams(req, res, next) {
     const teams = Math.max(2, numberOfTeams || 2);
 
     const { rows: players } = await pool.query(
-      `SELECT p.id, p.stars, ${displayNameSql('p')} AS name FROM confirmations c
+      `SELECT p.id, p.stars, c.confirmed_at, ${displayNameSql('p')} AS name FROM confirmations c
        JOIN players p ON p.id = c.player_id
        WHERE c.matchday_id = $1 AND c.status = 'confirmed' AND p.player_type != 'goleiro'
        ORDER BY p.stars DESC`,
       [req.params.id]
     );
 
+    // Excecao dos 21 na linha: quem confirmou por ultimo joga sozinho num time
+    // a mais (o 5o), e os outros 20 se equilibram normalmente
+    let sozinho = null;
+    if (players.length === teams * POR_TIME + 1) {
+      sozinho = players.reduce((ultimo, p) => (
+        new Date(p.confirmed_at || 0) > new Date(ultimo.confirmed_at || 0) ? p : ultimo
+      ), players[0]);
+    }
+    const sorteados = sozinho ? players.filter((p) => p.id !== sozinho.id) : players;
+
     const buckets = Array.from({ length: teams }, () => ({ players: [], totalStars: 0 }));
-    for (const player of players) {
+    for (const player of sorteados) {
       const target = buckets.reduce((min, b) => (b.totalStars < min.totalStars ? b : min), buckets[0]);
       target.players.push(player);
       target.totalStars += Number(player.stars);
     }
+    if (sozinho) buckets.push({ players: [sozinho], totalStars: Number(sozinho.stars) });
 
     await pool.query('DELETE FROM teams WHERE matchday_id = $1', [req.params.id]);
     const created = [];
@@ -776,6 +791,7 @@ async function drawTeams(req, res, next) {
 
     await auditaPelada(req, 'matchday.draw_teams', req.params.id, {
       times: created.length, jogadores: players.length,
+      ...(sozinho ? { time_sozinho: sozinho.name } : {}),
     });
     res.json(created);
   } catch (err) {
