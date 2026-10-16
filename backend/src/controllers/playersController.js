@@ -47,6 +47,21 @@ function parseMensalistaNumber(value) {
 // Elenco ativo, todos os tipos: e o que "GET /players" sem filtro devolve.
 // Existe como funcao a parte (nao so a rota) para telas que agregam varias
 // consultas numa unica chamada poderem reaproveitar a mesma query.
+// Dados de contato e de gestao: so o admin e o proprio jogador veem. Os demais
+// jogadores precisam de nome, foto, posicao e tipo para as telas do grupo, nao
+// do telefone e e-mail de todo mundo.
+const CAMPOS_PRIVADOS = [
+  'phone', 'email', 'block_reason', 'blocked_until', 'login_locked',
+  'exempt_monthly', 'auto_roster',
+];
+
+function semCamposPrivados(player, user) {
+  if (user.role === 'admin' || player.id === user.id) return player;
+  const publico = { ...player };
+  for (const campo of CAMPOS_PRIVADOS) delete publico[campo];
+  return publico;
+}
+
 async function listActivePlayers() {
   const { rows } = await pool.query(
     `SELECT ${PLAYER_FIELDS} FROM players WHERE active ORDER BY ${PLAYER_ORDER}`
@@ -78,7 +93,7 @@ async function list(req, res, next) {
       `SELECT ${PLAYER_FIELDS} FROM players ${where} ORDER BY ${PLAYER_ORDER}`,
       params
     );
-    res.json(rows);
+    res.json(rows.map((p) => semCamposPrivados(p, req.user)));
   } catch (err) {
     next(err);
   }
@@ -91,7 +106,7 @@ async function getById(req, res, next) {
       [req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Jogador não encontrado' });
-    res.json(rows[0]);
+    res.json(semCamposPrivados(rows[0], req.user));
   } catch (err) {
     next(err);
   }

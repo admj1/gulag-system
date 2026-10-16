@@ -6,6 +6,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 
 const authRoutes = require('./routes/auth');
@@ -68,7 +69,9 @@ function rateLimitKey(req) {
       // token invalido ou expirado: usa o IP mesmo
     }
   }
-  return req.ip;
+  // Agrupa o IPv6 pelo prefixo da rede: sem isso, quem tem IPv6 troca de
+  // endereco e foge do limite
+  return ipKeyGenerator(req.ip);
 }
 
 // Leitura (GET) fica de fora do limite: abrir telas nao gasta recurso do banco

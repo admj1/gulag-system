@@ -210,6 +210,15 @@ export default function AdminMatchdayDetailPage() {
   }
 
   async function drawTeams() {
+    // Sortear de novo apaga os times atuais, junto com as vitorias, empates e
+    // derrotas ja lancadas neles
+    if (teams.length > 0) {
+      const comResultado = teams.some((t) => (Number(t.wins) || 0) + (Number(t.draws) || 0) + (Number(t.losses) || 0) > 0);
+      const aviso = comResultado
+        ? 'Sortear de novo APAGA os times atuais e as vitórias, empates e derrotas já lançadas. Continuar?'
+        : 'Sortear de novo desfaz os times atuais, incluindo os ajustes feitos à mão. Continuar?';
+      if (!window.confirm(aviso)) return;
+    }
     try {
       await api.post(`/matchdays/${id}/draw-teams`, { numberOfTeams: Number(numberOfTeams) });
       toast.success('Times sorteados');
