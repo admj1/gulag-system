@@ -1,11 +1,12 @@
 const cron = require('node-cron');
 const pool = require('../config/db');
-const { closeMatchday } = require('../controllers/matchdaysController');
+const { closeMatchday, vagasDeLinha } = require('../controllers/matchdaysController');
 const { logAudit, dataPelada } = require('../services/audit');
 
 // Lista so fecha sozinha quando ja da jogo: 20 na linha (mensalistas +
-// diaristas confirmados) e pelo menos 1 goleiro. Sem isso continua aberta
-// depois do prazo, para mais gente poder entrar.
+// diaristas confirmados; 25 quando ha time 5, ver vagasDeLinha) e pelo menos 1
+// goleiro. Sem isso continua aberta depois do prazo, para mais gente poder
+// entrar.
 const MIN_LINHA = 20;
 const MIN_GOLEIROS = 1;
 
@@ -20,6 +21,7 @@ async function fechaListasVencidas() {
   const { rows } = await pool.query(
     `SELECT m.id,
             COUNT(*) FILTER (WHERE p.player_type IN ('mensalista', 'diarista'))::int AS linha,
+            COUNT(*) FILTER (WHERE p.player_type = 'mensalista')::int AS mensalistas,
             COUNT(*) FILTER (WHERE p.player_type = 'goleiro')::int AS goleiros
      FROM matchdays m
      LEFT JOIN confirmations c ON c.matchday_id = m.id AND c.status = 'confirmed'
@@ -28,7 +30,8 @@ async function fechaListasVencidas() {
      GROUP BY m.id`
   );
   for (const matchday of rows) {
-    if (matchday.linha < MIN_LINHA || matchday.goleiros < MIN_GOLEIROS) continue;
+    const minLinha = Math.max(MIN_LINHA, vagasDeLinha(matchday.mensalistas));
+    if (matchday.linha < minLinha || matchday.goleiros < MIN_GOLEIROS) continue;
     console.log(`Fechando lista da pelada ${matchday.id} (prazo vencido e lista completa)`);
     const resumo = await closeMatchday(matchday.id);
     await logAudit({

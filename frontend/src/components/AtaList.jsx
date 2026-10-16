@@ -21,8 +21,10 @@ export default function AtaList({
     .sort((a, b) => (a.queue_position ?? 999) - (b.queue_position ?? 999));
 
   const confirmedMensalistas = mensalistas.filter((c) => c.status === 'confirmed').length;
-  // A pelada fecha com 20 na linha: os diaristas completam o que faltar
-  const vagasLivres = Math.max(0, 20 - confirmedMensalistas);
+  // A pelada fecha com 20 na linha (25 com time 5, que existe a partir de 21
+  // mensalistas confirmados): os diaristas completam o que faltar
+  const alvoLinha = confirmedMensalistas > 20 ? 25 : 20;
+  const vagasLivres = Math.max(0, alvoLinha - confirmedMensalistas);
 
   // Quem incluiu alguem pode retirar essa pessoa se ela desistir
   const canRemove = (entry) =>
@@ -45,7 +47,7 @@ export default function AtaList({
 
       <Card title={`Diaristas (${diaristas.filter((c) => c.status === 'confirmed').length})`}>
         <p className="text-xs text-gray-500 mb-2">
-          Por ordem de confirmação · {vagasLivres} vaga(s) para completar 20 na linha
+          Por ordem de confirmação · {vagasLivres} vaga(s) para completar {alvoLinha} na linha
         </p>
         {diaristas.length === 0 ? (
           <EmptyState>Nenhum diarista inscrito.</EmptyState>
